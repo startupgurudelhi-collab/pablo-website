@@ -57,6 +57,7 @@ import { MediaUploaderPanel } from '../components/admin/MediaUploaderPanel';
 import { EditItemModal } from '../components/admin/EditItemModal';
 import { EventsManagerPanel } from '../components/admin/EventsManagerPanel';
 import { LegalPagesPanel } from '../components/admin/LegalPagesPanel';
+import { AboutManagerPanel } from '../components/admin/AboutManagerPanel';
 import { StudioMedia } from '../components/StudioMedia';
 
 type AdminSection = 'home' | 'work' | 'events' | 'about' | 'contact';
@@ -94,7 +95,6 @@ export function AdminPage({ onSettingsUpdated }: AdminPageProps) {
   // Standalone media upload states
   const [heroUploading, setHeroUploading] = useState(false);
   const [heroProgress, setHeroProgress] = useState(0);
-  const [aboutUploading, setAboutUploading] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [servicesText, setServicesText] = useState('');
 
@@ -286,28 +286,6 @@ export function AdminPage({ onSettingsUpdated }: AdminPageProps) {
     }
   };
 
-  const handleUploadAboutMedia = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file || !settings) return;
-    setAboutUploading(true);
-    setErrorMessage('');
-    try {
-      const uploaded = await uploadStandaloneMedia(file);
-      const updated = await updateAdminSettings({
-        aboutImageUrl: uploaded.url,
-        aboutImageType: uploaded.mediaType,
-      });
-      setSettings(updated.settings);
-      onSettingsUpdated(updated.settings);
-      showToast('About section photograph updated.');
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to upload About photograph.');
-    } finally {
-      setAboutUploading(false);
-    }
-  };
-
   const handleUploadLogo = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -478,7 +456,7 @@ export function AdminPage({ onSettingsUpdated }: AdminPageProps) {
     },
     about: {
       title: 'About',
-      subtitle: 'Edit studio narrative, About page imagery, and website legal policies.',
+      subtitle: 'Manage Hero Banner, Our Story, What We Create, Creative Process, Closing CTA, and website legal policies.',
     },
     contact: {
       title: 'Contact',
@@ -1572,97 +1550,13 @@ export function AdminPage({ onSettingsUpdated }: AdminPageProps) {
             />
           )}
 
-          {/* SECTION 4: ABOUT (Includes Studio Story + Footer Legal Pages) */}
-          {activeSection === 'about' && settings && (
+          {/* SECTION 4: ABOUT (Full 5-Section About CMS + Footer Legal Pages) */}
+          {activeSection === 'about' && (
             <div className="space-y-10">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                <div className="lg:col-span-5 bg-white border border-[#171614]/10 p-6 sm:p-8 space-y-5 self-start">
-                  <h2 className="font-serif text-2xl font-normal text-[#171614]">
-                    About Section Photograph
-                  </h2>
-                  <div className="aspect-[4/3] bg-[#EFECE6] overflow-hidden">
-                    <StudioMedia
-                      src={settings.aboutImageUrl || settings.heroMediaUrl}
-                      thumbnailSrc={settings.aboutImageUrl || settings.heroMediaUrl}
-                      mediaType={settings.aboutImageType || 'image'}
-                      alt="About Section Preview"
-                      autoPlayVideo={settings.aboutImageType === 'video'}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <label className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-medium bg-[#171614] text-[#FAF8F5] hover:bg-[#2E2B27] cursor-pointer">
-                    <Upload className="w-4 h-4" />
-                    <span>{aboutUploading ? 'Uploading...' : 'Change About Photo / Video'}</span>
-                    <input
-                      type="file"
-                      accept=".jpg,.jpeg,.png,.webp,.mp4,image/jpeg,image/png,image/webp,video/mp4"
-                      onChange={handleUploadAboutMedia}
-                      disabled={aboutUploading}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-
-                <form
-                  onSubmit={(e) => handleSaveSettingsForm(e)}
-                  className="lg:col-span-7 bg-white border border-[#171614]/10 p-6 sm:p-8 space-y-5"
-                >
-                  <h2 className="font-serif text-2xl font-normal text-[#171614]">
-                    Brand Introduction &amp; Philosophy
-                  </h2>
-
-                  <div>
-                    <label className="block text-xs font-medium text-[#5C5750] mb-1.5">
-                      About Headline
-                    </label>
-                    <input
-                      type="text"
-                      value={settings.aboutHeadline}
-                      onChange={(e) => setSettings({ ...settings, aboutHeadline: e.target.value })}
-                      className="w-full px-4 py-2.5 text-sm bg-[#FAF8F5] border border-[#171614]/15"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-[#5C5750] mb-1.5">
-                      Studio Narrative (separate paragraphs with a blank line)
-                    </label>
-                    <textarea
-                      rows={8}
-                      value={settings.aboutContent}
-                      onChange={(e) => setSettings({ ...settings, aboutContent: e.target.value })}
-                      className="w-full px-4 py-2.5 text-sm bg-[#FAF8F5] border border-[#171614]/15"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-[#5C5750] mb-1.5">
-                      Brand Philosophy / Craft Note
-                    </label>
-                    <input
-                      type="text"
-                      value={settings.aboutCraftNote}
-                      onChange={(e) =>
-                        setSettings({ ...settings, aboutCraftNote: e.target.value })
-                      }
-                      className="w-full px-4 py-2.5 text-sm bg-[#FAF8F5] border border-[#171614]/15"
-                    />
-                  </div>
-
-                  <div className="pt-2">
-                    <button
-                      type="submit"
-                      disabled={savingSettings}
-                      className="px-7 py-3 text-xs font-medium bg-[#171614] text-[#FAF8F5] hover:bg-[#2E2B27] disabled:opacity-50"
-                    >
-                      {savingSettings ? 'Saving...' : 'Save About Section'}
-                    </button>
-                  </div>
-                </form>
-              </div>
+              <AboutManagerPanel onNotify={showToast} onError={setErrorMessage} />
 
               {/* Studio Policies & Legal Pages (Footer Links) */}
-              <div className="pt-4 border-t border-[#171614]/10 space-y-5">
+              <div className="pt-6 border-t border-[#171614]/10 space-y-5">
                 <div>
                   <h2 className="font-serif text-2xl font-normal text-[#171614]">
                     Legal Policies (Footer Links)
@@ -1689,14 +1583,19 @@ export function AdminPage({ onSettingsUpdated }: AdminPageProps) {
                 className="grid grid-cols-1 lg:grid-cols-12 gap-8"
               >
                 <div className="lg:col-span-6 bg-white border border-[#171614]/10 p-6 sm:p-8 space-y-5">
-                  <h2 className="font-serif text-2xl font-normal text-[#171614]">
-                    Studio Contact Details
-                  </h2>
+                  <div>
+                    <h2 className="font-serif text-2xl font-normal text-[#171614]">
+                      Studio Contact Details
+                    </h2>
+                    <p className="mt-1 text-xs text-[#5C5750]">
+                      All fields are optional. Any field left blank stays hidden from the public footer and Contact page.
+                    </p>
+                  </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-[#5C5750] mb-1.5">
-                        Phone Number
+                        Primary Contact Number
                       </label>
                       <input
                         type="text"
@@ -1704,7 +1603,7 @@ export function AdminPage({ onSettingsUpdated }: AdminPageProps) {
                         onChange={(e) =>
                           setSettings({ ...settings, contactPhone: e.target.value })
                         }
-                        placeholder="e.g. +91 98..."
+                        placeholder="Optional"
                         className="w-full px-4 py-2.5 text-sm bg-[#FAF8F5] border border-[#171614]/15"
                       />
                     </div>
@@ -1718,7 +1617,7 @@ export function AdminPage({ onSettingsUpdated }: AdminPageProps) {
                         onChange={(e) =>
                           setSettings({ ...settings, whatsappNumber: e.target.value })
                         }
-                        placeholder="e.g. +9198..."
+                        placeholder="Optional"
                         className="w-full px-4 py-2.5 text-sm bg-[#FAF8F5] border border-[#171614]/15"
                       />
                     </div>
@@ -1726,15 +1625,87 @@ export function AdminPage({ onSettingsUpdated }: AdminPageProps) {
 
                   <div>
                     <label className="block text-xs font-medium text-[#5C5750] mb-1.5">
-                      Contact Email
+                      Email Address
                     </label>
                     <input
                       type="email"
                       value={settings.contactEmail}
                       onChange={(e) => setSettings({ ...settings, contactEmail: e.target.value })}
-                      placeholder="studio@yourdomain.com"
+                      placeholder="Optional"
                       className="w-full px-4 py-2.5 text-sm bg-[#FAF8F5] border border-[#171614]/15"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-[#5C5750] mb-1.5">
+                      Studio Address
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={settings.address}
+                      onChange={(e) => setSettings({ ...settings, address: e.target.value })}
+                      placeholder="Optional"
+                      className="w-full px-4 py-2.5 text-sm bg-[#FAF8F5] border border-[#171614]/15"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="sm:col-span-3">
+                      <label className="block text-xs font-medium text-[#5C5750] mb-1.5">
+                        Opening Days
+                      </label>
+                      <input
+                        type="text"
+                        value={settings.openingDays}
+                        onChange={(e) =>
+                          setSettings({ ...settings, openingDays: e.target.value })
+                        }
+                        placeholder="Optional"
+                        className="w-full px-4 py-2.5 text-sm bg-[#FAF8F5] border border-[#171614]/15"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[#5C5750] mb-1.5">
+                        Opening Time
+                      </label>
+                      <input
+                        type="text"
+                        value={settings.openingTime}
+                        onChange={(e) =>
+                          setSettings({ ...settings, openingTime: e.target.value })
+                        }
+                        placeholder="Optional"
+                        className="w-full px-4 py-2.5 text-sm bg-[#FAF8F5] border border-[#171614]/15"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[#5C5750] mb-1.5">
+                        Closing Time
+                      </label>
+                      <input
+                        type="text"
+                        value={settings.closingTime}
+                        onChange={(e) =>
+                          setSettings({ ...settings, closingTime: e.target.value })
+                        }
+                        placeholder="Optional"
+                        className="w-full px-4 py-2.5 text-sm bg-[#FAF8F5] border border-[#171614]/15"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[#5C5750] mb-1.5">
+                        Appointment Info
+                      </label>
+                      <input
+                        type="text"
+                        value={settings.appointmentInfo}
+                        onChange={(e) =>
+                          setSettings({ ...settings, appointmentInfo: e.target.value })
+                        }
+                        placeholder="Optional"
+                        className="w-full px-4 py-2.5 text-sm bg-[#FAF8F5] border border-[#171614]/15"
+                      />
+                    </div>
                   </div>
 
                   <div>
@@ -1745,31 +1716,7 @@ export function AdminPage({ onSettingsUpdated }: AdminPageProps) {
                       type="url"
                       value={settings.instagramUrl}
                       onChange={(e) => setSettings({ ...settings, instagramUrl: e.target.value })}
-                      placeholder="https://instagram.com/..."
-                      className="w-full px-4 py-2.5 text-sm bg-[#FAF8F5] border border-[#171614]/15"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-[#5C5750] mb-1.5">
-                      Studio Address / Location
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={settings.address}
-                      onChange={(e) => setSettings({ ...settings, address: e.target.value })}
-                      className="w-full px-4 py-2.5 text-sm bg-[#FAF8F5] border border-[#171614]/15"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-[#5C5750] mb-1.5">
-                      Studio Hours
-                    </label>
-                    <input
-                      type="text"
-                      value={settings.studioHours}
-                      onChange={(e) => setSettings({ ...settings, studioHours: e.target.value })}
+                      placeholder="Optional"
                       className="w-full px-4 py-2.5 text-sm bg-[#FAF8F5] border border-[#171614]/15"
                     />
                   </div>

@@ -1,6 +1,10 @@
 import { INITIAL_ADMIN_EMAIL, INITIAL_ADMIN_PASSWORD } from './config.ts';
 import { hashPassword } from './auth.ts';
 import type {
+  AboutPageContent,
+  AboutPageData,
+  AboutProcessStep,
+  AboutServiceCategory,
   AdminUserPublic,
   AspectRatioType,
   Enquiry,
@@ -35,6 +39,9 @@ export interface DatabaseSchema {
   eventMedia: EventMediaItem[];
   legalPages: LegalPage[];
   siteSettings: SiteSettings;
+  aboutPage: AboutPageContent;
+  aboutServices: AboutServiceCategory[];
+  aboutProcessSteps: AboutProcessStep[];
   enquiries: Enquiry[];
   sessions: AdminSessionRecord[];
 }
@@ -244,7 +251,11 @@ export function createDefaultSiteSettings(now: string): SiteSettings {
     contactEmail: '',
     instagramUrl: '',
     address: '',
-    studioHours: 'Tuesday – Saturday, 10:30 AM – 7:00 PM (By Appointment)',
+    studioHours: '',
+    openingDays: '',
+    openingTime: '',
+    closingTime: '',
+    appointmentInfo: '',
     footerDescription:
       'Bespoke fashion design and custom stitching studio dedicated to individual silhouettes and hand-finished craftsmanship.',
     footerCopyright: 'PABLO Fashion Studio. All rights reserved.',
@@ -470,6 +481,8 @@ export function createInitialSeedData(): DatabaseSchema {
     },
   ];
 
+  const { aboutPage, aboutServices, aboutProcessSteps } = createDefaultAboutData(now);
+
   return {
     adminUsers,
     categories,
@@ -478,9 +491,137 @@ export function createInitialSeedData(): DatabaseSchema {
     eventMedia,
     legalPages: createDefaultLegalPages(now),
     siteSettings: createDefaultSiteSettings(now),
+    aboutPage,
+    aboutServices,
+    aboutProcessSteps,
     enquiries: [],
     sessions: [],
   };
+}
+
+export function createDefaultAboutData(now: string): {
+  aboutPage: AboutPageContent;
+  aboutServices: AboutServiceCategory[];
+  aboutProcessSteps: AboutProcessStep[];
+} {
+  const aboutPage: AboutPageContent = {
+    id: 'default',
+    heroHeading: 'About PABLO',
+    heroSubtitle: 'Bespoke fashion design and custom stitching shaped around individual form.',
+    heroImageUrl: '/src/assets/images/about_hero_atelier_1795277242672.jpg',
+    storyEyebrow: 'OUR STORY',
+    storyHeading: 'Crafted around the individual.',
+    storyContent:
+      'PABLO is an independent fashion design and custom stitching studio dedicated to garments built with quiet precision and personal proportion. Rather than working from standard sizing or mass templates, every piece begins with direct study of posture, movement, and textile drape.\n\nOur design philosophy balances clean architectural lines with fluid hand-finished construction. From first sketch and fabric curation to basted fittings and surface detailing, each commission is stitched for permanence and poise.',
+    storyClosingStatement:
+      'Individual patterns, thoughtful textiles, and bespoke stitching tailored exclusively by appointment.',
+    storyImageUrl: '/src/assets/images/about_story_craft_1795277242734.jpg',
+    servicesEyebrow: 'WHAT WE CREATE',
+    servicesHeading: 'Disciplines of the atelier.',
+    processEyebrow: 'OUR CREATIVE PROCESS',
+    processHeading: 'From first dialogue to final stitch.',
+    closingHeading: 'Every detail tells a story.',
+    closingDescription:
+      'Browse recent commissions from our studio archive or schedule a personal consultation to begin your custom outfit.',
+    closingImageUrl: '/src/assets/images/about_closing_silhouette_1795277242788.jpg',
+    closingPrimaryButtonText: 'Explore Our Work',
+    closingPrimaryButtonUrl: '/work',
+    closingSecondaryButtonText: 'Book a Fitting',
+    closingSecondaryButtonUrl: '/contact',
+    updatedAt: now,
+  };
+
+  const aboutServices: AboutServiceCategory[] = [
+    {
+      id: 'about_svc_custom_stitching',
+      title: 'Custom Stitching',
+      description:
+        'Precision-drafted patterns, tailored jackets, trousers, and crisp everyday or formal silhouettes cut specifically to your measurements.',
+      imageUrl: '/src/assets/images/work_bespoke_tailoring_1795009473780.jpg',
+      sortOrder: 1,
+      published: true,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'about_svc_designer_outfits',
+      title: 'Designer Outfits',
+      description:
+        'Original studio garments developed from initial concept sketches and draping trials into cohesive, one-of-a-kind wardrobe pieces.',
+      imageUrl: '/src/assets/images/hero_pablo_atelier_1795009473187.jpg',
+      sortOrder: 2,
+      published: true,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'about_svc_occasion_event_wear',
+      title: 'Occasion & Event Wear',
+      description:
+        'Sculpted celebration ensembles, evening gowns, and contemporary ceremonial looks crafted for milestone gatherings and showcases.',
+      imageUrl: '/src/assets/images/work_occasion_drape_1795009473548.jpg',
+      sortOrder: 3,
+      published: true,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'about_svc_embroidery_detailing',
+      title: 'Embroidery & Detailing',
+      description:
+        'Tonal hand embroidery, fine beadwork, textured trims, and delicate finishing stitches applied directly to custom surfaces.',
+      imageUrl: '/src/assets/images/work_hand_embroidery_1795009474962.jpg',
+      sortOrder: 4,
+      published: true,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+
+  const aboutProcessSteps: AboutProcessStep[] = [
+    {
+      id: 'about_step_1',
+      stepNumber: '01',
+      title: 'Consultation & Understanding',
+      description:
+        'We begin with a focused conversation around your occasion, personal comfort, silhouette preferences, and garment timeline.',
+      sortOrder: 1,
+      published: true,
+      updatedAt: now,
+    },
+    {
+      id: 'about_step_2',
+      stepNumber: '02',
+      title: 'Design & Fabric Selection',
+      description:
+        'Together we refine design proportions, drape direction, natural textiles, lining weights, and surface embroidery details.',
+      sortOrder: 2,
+      published: true,
+      updatedAt: now,
+    },
+    {
+      id: 'about_step_3',
+      stepNumber: '03',
+      title: 'Stitching & Construction',
+      description:
+        'Individual patterns are drafted and hand-cut before precision stitching, internal structuring, and artisanal embellishments take shape.',
+      sortOrder: 3,
+      published: true,
+      updatedAt: now,
+    },
+    {
+      id: 'about_step_4',
+      stepNumber: '04',
+      title: 'Fitting & Finishing',
+      description:
+        'During studio fittings, balance, hem flow, and posture lines are tuned before final hand-pressed finishing.',
+      sortOrder: 4,
+      published: true,
+      updatedAt: now,
+    },
+  ];
+
+  return { aboutPage, aboutServices, aboutProcessSteps };
 }
 
 export interface StudioOverviewStats {
@@ -625,5 +766,36 @@ export interface StudioStore {
   getSessionUser(token: string): Promise<AdminUserPublic | null>;
   deleteSession(token: string): Promise<void>;
   getOverviewStats(): Promise<StudioOverviewStats>;
+  // About Page CMS
+  getAboutPageData(publishedOnly?: boolean): Promise<AboutPageData>;
+  updateAboutContent(
+    patch: Partial<Omit<AboutPageContent, 'id' | 'updatedAt'>>
+  ): Promise<AboutPageContent>;
+  createAboutService(input: {
+    title: string;
+    description: string;
+    imageUrl: string;
+    published: boolean;
+    sortOrder?: number;
+  }): Promise<AboutServiceCategory>;
+  updateAboutService(
+    id: string,
+    patch: Partial<Pick<AboutServiceCategory, 'title' | 'description' | 'imageUrl' | 'published' | 'sortOrder'>>
+  ): Promise<AboutServiceCategory | null>;
+  reorderAboutServices(orderedIds: string[]): Promise<AboutServiceCategory[]>;
+  deleteAboutService(id: string): Promise<AboutServiceCategory | null>;
+  createAboutProcessStep(input: {
+    stepNumber: string;
+    title: string;
+    description: string;
+    published: boolean;
+    sortOrder?: number;
+  }): Promise<AboutProcessStep>;
+  updateAboutProcessStep(
+    id: string,
+    patch: Partial<Pick<AboutProcessStep, 'stepNumber' | 'title' | 'description' | 'published' | 'sortOrder'>>
+  ): Promise<AboutProcessStep | null>;
+  reorderAboutProcessSteps(orderedIds: string[]): Promise<AboutProcessStep[]>;
+  deleteAboutProcessStep(id: string): Promise<boolean>;
 }
 

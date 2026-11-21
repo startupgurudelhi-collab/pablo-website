@@ -148,6 +148,10 @@ CREATE TABLE IF NOT EXISTS `site_settings` (
   `instagram_url` VARCHAR(350) NOT NULL,
   `address` TEXT NOT NULL,
   `studio_hours` VARCHAR(255) NOT NULL,
+  `opening_days` VARCHAR(160) NOT NULL,
+  `opening_time` VARCHAR(80) NOT NULL,
+  `closing_time` VARCHAR(80) NOT NULL,
+  `appointment_info` VARCHAR(255) NOT NULL,
   `footer_description` TEXT NOT NULL,
   `footer_copyright` VARCHAR(300) NOT NULL,
   `nav_labels_json` LONGTEXT NOT NULL,
@@ -166,4 +170,54 @@ CREATE TABLE IF NOT EXISTS `enquiries` (
   `created_at` VARCHAR(40) NOT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_enquiries_status_created` (`status`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `about_page` (
+  `id` VARCHAR(64) NOT NULL,
+  `hero_heading` VARCHAR(240) NOT NULL,
+  `hero_subtitle` VARCHAR(400) NOT NULL,
+  `hero_image_url` VARCHAR(512) NOT NULL,
+  `story_eyebrow` VARCHAR(120) NOT NULL,
+  `story_heading` VARCHAR(240) NOT NULL,
+  `story_content` LONGTEXT NOT NULL,
+  `story_closing_statement` TEXT NOT NULL,
+  `story_image_url` VARCHAR(512) NOT NULL,
+  `services_eyebrow` VARCHAR(120) NOT NULL,
+  `services_heading` VARCHAR(240) NOT NULL,
+  `process_eyebrow` VARCHAR(120) NOT NULL,
+  `process_heading` VARCHAR(240) NOT NULL,
+  `closing_heading` VARCHAR(240) NOT NULL,
+  `closing_description` TEXT NOT NULL,
+  `closing_image_url` VARCHAR(512) NOT NULL,
+  `closing_primary_button_text` VARCHAR(120) NOT NULL,
+  `closing_primary_button_url` VARCHAR(255) NOT NULL,
+  `closing_secondary_button_text` VARCHAR(120) NOT NULL,
+  `closing_secondary_button_url` VARCHAR(255) NOT NULL,
+  `updated_at` VARCHAR(40) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `about_services` (
+  `id` VARCHAR(64) NOT NULL,
+  `title` VARCHAR(180) NOT NULL,
+  `description` TEXT NOT NULL,
+  `image_url` VARCHAR(512) NOT NULL,
+  `sort_order` INT NOT NULL DEFAULT 0,
+  `published` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` VARCHAR(40) NOT NULL,
+  `updated_at` VARCHAR(40) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_about_services_pub_sort` (`published`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `about_process_steps` (
+  `id` VARCHAR(64) NOT NULL,
+  `step_number` VARCHAR(24) NOT NULL,
+  `title` VARCHAR(180) NOT NULL,
+  `description` TEXT NOT NULL,
+  `sort_order` INT NOT NULL DEFAULT 0,
+  `published` TINYINT(1) NOT NULL DEFAULT 1,
+  `updated_at` VARCHAR(40) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_about_process_pub_sort` (`published`, `sort_order`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

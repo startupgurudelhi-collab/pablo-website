@@ -17,6 +17,26 @@ export function isExternalHref(url: string): boolean {
   return /^https?:\/\//i.test(url) || url.startsWith('mailto:') || url.startsWith('tel:');
 }
 
+export function formatStudioSchedule(settings: SiteSettings | null | undefined): {
+  scheduleLine: string;
+  appointmentInfo: string;
+} {
+  if (!settings) return { scheduleLine: '', appointmentInfo: '' };
+  const days = (settings.openingDays || '').trim();
+  const open = (settings.openingTime || '').trim();
+  const close = (settings.closingTime || '').trim();
+  const appointment = (settings.appointmentInfo || '').trim();
+  const rawLegacy = (settings.studioHours || '').trim();
+  const legacyHours =
+    rawLegacy === 'Tuesday – Saturday, 10:30 AM – 7:00 PM (By Appointment)' ? '' : rawLegacy;
+
+  const timeRange = open && close ? `${open} – ${close}` : open || close || '';
+  const scheduleLine =
+    days && timeRange ? `${days} · ${timeRange}` : days || timeRange || legacyHours;
+
+  return { scheduleLine, appointmentInfo: appointment };
+}
+
 export function PublicLayout({ settings }: PublicLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
@@ -43,12 +63,27 @@ export function PublicLayout({ settings }: PublicLayoutProps) {
         : 'text-[#5C5750] hover:text-[#171614]'
     }`;
 
-  const whatsappRaw = settings?.whatsappNumber || settings?.socialLinks?.whatsapp || '';
+  const whatsappRaw = (settings?.whatsappNumber || settings?.socialLinks?.whatsapp || '').trim();
   const whatsappUrl = whatsappRaw ? formatWhatsAppUrl(whatsappRaw) : '';
-  const instagramUrl = settings?.instagramUrl || settings?.socialLinks?.instagram || '';
-  const facebookUrl = settings?.socialLinks?.facebook || '';
-  const pinterestUrl = settings?.socialLinks?.pinterest || '';
-  const youtubeUrl = settings?.socialLinks?.youtube || '';
+  const instagramUrl = (settings?.instagramUrl || settings?.socialLinks?.instagram || '').trim();
+  const facebookUrl = (settings?.socialLinks?.facebook || '').trim();
+  const pinterestUrl = (settings?.socialLinks?.pinterest || '').trim();
+  const youtubeUrl = (settings?.socialLinks?.youtube || '').trim();
+  const contactPhone = (settings?.contactPhone || '').trim();
+  const contactEmail = (settings?.contactEmail || '').trim();
+  const studioAddress = (settings?.address || '').trim();
+  const { scheduleLine, appointmentInfo } = formatStudioSchedule(settings);
+  const hasSocialLinks = Boolean(
+    instagramUrl || whatsappUrl || facebookUrl || pinterestUrl || youtubeUrl
+  );
+  const hasAnyConnectDetails = Boolean(
+    contactPhone ||
+      contactEmail ||
+      studioAddress ||
+      scheduleLine ||
+      appointmentInfo ||
+      hasSocialLinks
+  );
   const ctaTarget = settings?.heroSecondaryCtaUrl || '/contact';
 
   return (
@@ -233,98 +268,101 @@ export function PublicLayout({ settings }: PublicLayoutProps) {
                 Connect
               </h2>
               <div className="space-y-2.5 text-sm text-[#5C5750]">
-                {settings?.contactPhone && (
+                {contactPhone && (
                   <p>
                     <a
-                      href={`tel:${settings.contactPhone.replace(/\s+/g, '')}`}
+                      href={`tel:${contactPhone.replace(/\s+/g, '')}`}
                       className="text-[#171614] hover:underline"
                     >
-                      {settings.contactPhone}
+                      {contactPhone}
                     </a>
                   </p>
                 )}
-                {settings?.contactEmail && (
+                {contactEmail && (
                   <p>
                     <a
-                      href={`mailto:${settings.contactEmail}`}
+                      href={`mailto:${contactEmail}`}
                       className="text-[#171614] hover:underline"
                     >
-                      {settings.contactEmail}
+                      {contactEmail}
                     </a>
                   </p>
                 )}
-                {settings?.address && <p className="leading-relaxed">{settings.address}</p>}
-                {settings?.studioHours && (
-                  <p className="text-xs text-[#766E64]">{settings.studioHours}</p>
+                {studioAddress && (
+                  <p className="leading-relaxed whitespace-pre-line">{studioAddress}</p>
+                )}
+                {scheduleLine && <p className="text-xs text-[#766E64]">{scheduleLine}</p>}
+                {appointmentInfo && (
+                  <p className="text-xs text-[#766E64]">{appointmentInfo}</p>
                 )}
 
-                <div className="pt-2 flex flex-wrap items-center gap-4">
-                  {instagramUrl && (
-                    <a
-                      href={instagramUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-sm text-[#171614] hover:text-[#766E64] transition-colors"
-                    >
-                      <Instagram className="w-4 h-4" />
-                      <span>Instagram</span>
-                    </a>
-                  )}
-                  {whatsappUrl && (
-                    <a
-                      href={whatsappUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-sm text-[#171614] hover:text-[#766E64] transition-colors"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                      <span>WhatsApp</span>
-                    </a>
-                  )}
-                  {facebookUrl && (
-                    <a
-                      href={facebookUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-[#171614] hover:text-[#766E64] transition-colors"
-                    >
-                      Facebook
-                    </a>
-                  )}
-                  {pinterestUrl && (
-                    <a
-                      href={pinterestUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-[#171614] hover:text-[#766E64] transition-colors"
-                    >
-                      Pinterest
-                    </a>
-                  )}
-                  {youtubeUrl && (
-                    <a
-                      href={youtubeUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-[#171614] hover:text-[#766E64] transition-colors"
-                    >
-                      YouTube
-                    </a>
-                  )}
-                  {!instagramUrl &&
-                    !whatsappUrl &&
-                    !facebookUrl &&
-                    !pinterestUrl &&
-                    !youtubeUrl &&
-                    !settings?.contactPhone && (
-                      <Link
-                        to="/contact"
-                        className="text-sm text-[#171614] underline underline-offset-4"
+                {hasSocialLinks && (
+                  <div className="pt-2 flex flex-wrap items-center gap-4">
+                    {instagramUrl && (
+                      <a
+                        href={instagramUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm text-[#171614] hover:text-[#766E64] transition-colors"
                       >
-                        Send a Studio Enquiry
-                      </Link>
+                        <Instagram className="w-4 h-4" />
+                        <span>Instagram</span>
+                      </a>
                     )}
-                </div>
+                    {whatsappUrl && (
+                      <a
+                        href={whatsappUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm text-[#171614] hover:text-[#766E64] transition-colors"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>WhatsApp</span>
+                      </a>
+                    )}
+                    {facebookUrl && (
+                      <a
+                        href={facebookUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-[#171614] hover:text-[#766E64] transition-colors"
+                      >
+                        Facebook
+                      </a>
+                    )}
+                    {pinterestUrl && (
+                      <a
+                        href={pinterestUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-[#171614] hover:text-[#766E64] transition-colors"
+                      >
+                        Pinterest
+                      </a>
+                    )}
+                    {youtubeUrl && (
+                      <a
+                        href={youtubeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-[#171614] hover:text-[#766E64] transition-colors"
+                      >
+                        YouTube
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {!hasAnyConnectDetails && (
+                  <div className="pt-1">
+                    <Link
+                      to="/contact"
+                      className="text-sm text-[#171614] underline underline-offset-4 hover:text-[#5C5750]"
+                    >
+                      Send a Studio Enquiry
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
           </div>

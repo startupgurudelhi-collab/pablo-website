@@ -226,6 +226,23 @@ function parseBoolean(value: unknown, fallback = false): boolean {
   return fallback;
 }
 
+function validateSafeUrl(value: unknown, fallback = ''): string {
+  const cleaned = sanitizeText(value, 500);
+  if (!cleaned) return fallback;
+  if (cleaned.startsWith('/') && !cleaned.startsWith('//')) {
+    return cleaned;
+  }
+  try {
+    const parsed = new URL(cleaned);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return cleaned;
+    }
+  } catch {
+    // Reject malformed or dangerous schemes such as javascript: or data:
+  }
+  return fallback;
+}
+
 async function getAuthenticatedUser(req: Request): Promise<AdminUserPublic | null> {
   const signedCookie = req.cookies?.[SESSION_COOKIE_NAME] as string | undefined;
   const token = verifySignedToken(signedCookie);
@@ -381,6 +398,16 @@ app.get('/api/public/events/:id', async (req, res) => {
   } catch (err) {
     console.error('Public event detail error:', err);
     res.status(500).json({ error: 'Failed to load event details.' });
+  }
+});
+
+app.get('/api/public/about', async (_req, res) => {
+  try {
+    const about = await store.getAboutPageData(true);
+    res.json(about);
+  } catch (err) {
+    console.error('Public about error:', err);
+    res.status(500).json({ error: 'Failed to load About page content.' });
   }
 });
 
@@ -1280,6 +1307,16 @@ app.put('/api/admin/settings', requireAdmin, async (req, res) => {
       address: body.address !== undefined ? sanitizeText(body.address, 400) : prev.address,
       studioHours:
         body.studioHours !== undefined ? sanitizeText(body.studioHours, 200) : prev.studioHours,
+      openingDays:
+        body.openingDays !== undefined ? sanitizeText(body.openingDays, 120) : prev.openingDays,
+      openingTime:
+        body.openingTime !== undefined ? sanitizeText(body.openingTime, 60) : prev.openingTime,
+      closingTime:
+        body.closingTime !== undefined ? sanitizeText(body.closingTime, 60) : prev.closingTime,
+      appointmentInfo:
+        body.appointmentInfo !== undefined
+          ? sanitizeText(body.appointmentInfo, 240)
+          : prev.appointmentInfo,
       footerDescription:
         body.footerDescription !== undefined
           ? sanitizeText(body.footerDescription, 600)
@@ -1420,6 +1457,374 @@ app.put('/api/admin/legal/:slug', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('Update legal page error:', err);
     res.status(500).json({ error: 'Failed to update legal page.' });
+  }
+});
+
+// About Page CMS management
+app.get('/api/admin/about', requireAdmin, async (_req, res) => {
+  try {
+    res.json(await store.getAboutPageData(false));
+  } catch (err) {
+    console.error('Admin get about error:', err);
+    res.status(500).json({ error: 'Failed to load About page CMS data.' });
+  }
+});
+
+app.put('/api/admin/about/content', requireAdmin, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const prevData = await store.getAboutPageData(false);
+    const prev = prevData.content;
+
+    const nextHeroHeading =
+      body.heroHeading !== undefined ? sanitizeText(body.heroHeading, 160) : prev.heroHeading;
+    if (!nextHeroHeading) {
+      res.status(400).json({ error: 'Hero heading cannot be empty.' });
+      return;
+    }
+
+    const nextStoryHeading =
+      body.storyHeading !== undefined ? sanitizeText(body.storyHeading, 240) : prev.storyHeading;
+    if (!nextStoryHeading) {
+      res.status(400).json({ error: 'Our Story heading cannot be empty.' });
+      return;
+    }
+
+    const nextClosingHeading =
+      body.closingHeading !== undefined
+        ? sanitizeText(body.closingHeading, 240)
+        : prev.closingHeading;
+    if (!nextClosingHeading) {
+      res.status(400).json({ error: 'Closing banner heading cannot be empty.' });
+      return;
+    }
+
+    const patch = {
+      heroHeading: nextHeroHeading,
+      heroSubtitle:
+        body.heroSubtitle !== undefined ? sanitizeText(body.heroSubtitle, 300) : prev.heroSubtitle,
+      heroImageUrl:
+        body.heroImageUrl !== undefined
+          ? validateSafeUrl(body.heroImageUrl, prev.heroImageUrl)
+          : prev.heroImageUrl,
+      storyEyebrow:
+        body.storyEyebrow !== undefined ? sanitizeText(body.storyEyebrow, 80) : prev.storyEyebrow,
+      storyHeading: nextStoryHeading,
+      storyContent:
+        body.storyContent !== undefined ? sanitizeText(body.storyContent, 8000) : prev.storyContent,
+      storyClosingStatement:
+        body.storyClosingStatement !== undefined
+          ? sanitizeText(body.storyClosingStatement, 500)
+          : prev.storyClosingStatement,
+      storyImageUrl:
+        body.storyImageUrl !== undefined
+          ? validateSafeUrl(body.storyImageUrl, prev.storyImageUrl)
+          : prev.storyImageUrl,
+      servicesEyebrow:
+        body.servicesEyebrow !== undefined
+          ? sanitizeText(body.servicesEyebrow, 80)
+          : prev.servicesEyebrow,
+      servicesHeading:
+        body.servicesHeading !== undefined
+          ? sanitizeText(body.servicesHeading, 200)
+          : prev.servicesHeading,
+      processEyebrow:
+        body.processEyebrow !== undefined
+          ? sanitizeText(body.processEyebrow, 80)
+          : prev.processEyebrow,
+      processHeading:
+        body.processHeading !== undefined
+          ? sanitizeText(body.processHeading, 200)
+          : prev.processHeading,
+      closingHeading: nextClosingHeading,
+      closingDescription:
+        body.closingDescription !== undefined
+          ? sanitizeText(body.closingDescription, 600)
+          : prev.closingDescription,
+      closingImageUrl:
+        body.closingImageUrl !== undefined
+          ? validateSafeUrl(body.closingImageUrl, prev.closingImageUrl)
+          : prev.closingImageUrl,
+      closingPrimaryButtonText:
+        body.closingPrimaryButtonText !== undefined
+          ? sanitizeText(body.closingPrimaryButtonText, 80) || prev.closingPrimaryButtonText
+          : prev.closingPrimaryButtonText,
+      closingPrimaryButtonUrl:
+        body.closingPrimaryButtonUrl !== undefined
+          ? validateSafeUrl(body.closingPrimaryButtonUrl, prev.closingPrimaryButtonUrl)
+          : prev.closingPrimaryButtonUrl,
+      closingSecondaryButtonText:
+        body.closingSecondaryButtonText !== undefined
+          ? sanitizeText(body.closingSecondaryButtonText, 80) || prev.closingSecondaryButtonText
+          : prev.closingSecondaryButtonText,
+      closingSecondaryButtonUrl:
+        body.closingSecondaryButtonUrl !== undefined
+          ? validateSafeUrl(body.closingSecondaryButtonUrl, prev.closingSecondaryButtonUrl)
+          : prev.closingSecondaryButtonUrl,
+    };
+
+    const updated = await store.updateAboutContent(patch);
+
+    if (prev.heroImageUrl !== updated.heroImageUrl) {
+      await removeMediaUrlFromDiskIfUnused(prev.heroImageUrl);
+    }
+    if (prev.storyImageUrl !== updated.storyImageUrl) {
+      await removeMediaUrlFromDiskIfUnused(prev.storyImageUrl);
+    }
+    if (prev.closingImageUrl !== updated.closingImageUrl) {
+      await removeMediaUrlFromDiskIfUnused(prev.closingImageUrl);
+    }
+
+    res.json({ content: updated });
+  } catch (err) {
+    console.error('Update about content error:', err);
+    res.status(500).json({ error: 'Failed to update About page content.' });
+  }
+});
+
+app.put('/api/admin/about/services/reorder', requireAdmin, async (req, res) => {
+  try {
+    const orderedIds = Array.isArray(req.body?.orderedIds)
+      ? req.body.orderedIds.map((id: unknown) => sanitizeText(id, 100)).filter(Boolean)
+      : [];
+    if (orderedIds.length === 0) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    const services = await store.reorderAboutServices(orderedIds);
+    res.json({ services });
+  } catch (err) {
+    console.error('Reorder about services error:', err);
+    res.status(500).json({ error: 'Failed to reorder service categories.' });
+  }
+});
+
+app.post(
+  '/api/admin/about/services',
+  requireAdmin,
+  upload.single('cover'),
+  async (req, res) => {
+    const coverFile = req.file;
+    try {
+      if (coverFile) {
+        const sizeErr = validateUploadedFileSize(coverFile);
+        if (sizeErr) {
+          removeLocalFileIfSafe(coverFile.path);
+          res.status(400).json({ error: sizeErr });
+          return;
+        }
+      }
+
+      const title = sanitizeText(req.body?.title, 160);
+      if (title.length < 2) {
+        removeLocalFileIfSafe(coverFile?.path);
+        res.status(400).json({ error: 'Service title must be at least 2 characters.' });
+        return;
+      }
+
+      const description = sanitizeText(req.body?.description, 2000);
+      const imageUrl = coverFile
+        ? `/media/originals/${coverFile.filename}`
+        : validateSafeUrl(req.body?.imageUrl, '');
+
+      if (!imageUrl) {
+        removeLocalFileIfSafe(coverFile?.path);
+        res.status(400).json({ error: 'Please upload a photograph for this service category.' });
+        return;
+      }
+
+      const service = await store.createAboutService({
+        title,
+        description,
+        imageUrl,
+        published: parseBoolean(req.body?.published, true),
+      });
+
+      res.status(201).json({ service });
+    } catch (err) {
+      removeLocalFileIfSafe(coverFile?.path);
+      console.error('Create about service error:', err);
+      res.status(500).json({ error: 'Failed to create service category.' });
+    }
+  }
+);
+
+app.patch(
+  '/api/admin/about/services/:id',
+  requireAdmin,
+  upload.single('cover'),
+  async (req, res) => {
+    const id = String(req.params.id);
+    const coverFile = req.file;
+    try {
+      const data = await store.getAboutPageData(false);
+      const existing = data.services.find((s) => s.id === id);
+      if (!existing) {
+        removeLocalFileIfSafe(coverFile?.path);
+        res.status(404).json({ error: 'Service category not found.' });
+        return;
+      }
+
+      if (coverFile) {
+        const sizeErr = validateUploadedFileSize(coverFile);
+        if (sizeErr) {
+          removeLocalFileIfSafe(coverFile.path);
+          res.status(400).json({ error: sizeErr });
+          return;
+        }
+      }
+
+      const patch: Record<string, unknown> = {};
+      if (req.body?.title !== undefined) {
+        const title = sanitizeText(req.body.title, 160);
+        if (title.length < 2) {
+          removeLocalFileIfSafe(coverFile?.path);
+          res.status(400).json({ error: 'Service title must be at least 2 characters.' });
+          return;
+        }
+        patch.title = title;
+      }
+      if (req.body?.description !== undefined) {
+        patch.description = sanitizeText(req.body.description, 2000);
+      }
+      if (req.body?.published !== undefined) {
+        patch.published = parseBoolean(req.body.published, existing.published);
+      }
+      if (typeof req.body?.sortOrder === 'number') {
+        patch.sortOrder = req.body.sortOrder;
+      }
+
+      const oldImageUrl = existing.imageUrl;
+      if (coverFile) {
+        patch.imageUrl = `/media/originals/${coverFile.filename}`;
+      } else if (req.body?.imageUrl !== undefined) {
+        const cleanUrl = validateSafeUrl(req.body.imageUrl, '');
+        if (!cleanUrl) {
+          res.status(400).json({ error: 'Service photograph URL cannot be empty.' });
+          return;
+        }
+        patch.imageUrl = cleanUrl;
+      }
+
+      const updated = await store.updateAboutService(id, patch);
+      if (oldImageUrl && updated?.imageUrl !== oldImageUrl) {
+        await removeMediaUrlFromDiskIfUnused(oldImageUrl, id);
+      }
+
+      res.json({ service: updated });
+    } catch (err) {
+      removeLocalFileIfSafe(coverFile?.path);
+      console.error('Update about service error:', err);
+      res.status(500).json({ error: 'Failed to update service category.' });
+    }
+  }
+);
+
+app.delete('/api/admin/about/services/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const removed = await store.deleteAboutService(id);
+    if (!removed) {
+      res.status(404).json({ error: 'Service category not found.' });
+      return;
+    }
+    await removeMediaUrlFromDiskIfUnused(removed.imageUrl, id);
+    res.json({ deleted: true, id });
+  } catch (err) {
+    console.error('Delete about service error:', err);
+    res.status(500).json({ error: 'Failed to delete service category.' });
+  }
+});
+
+app.put('/api/admin/about/process/reorder', requireAdmin, async (req, res) => {
+  try {
+    const orderedIds = Array.isArray(req.body?.orderedIds)
+      ? req.body.orderedIds.map((id: unknown) => sanitizeText(id, 100)).filter(Boolean)
+      : [];
+    if (orderedIds.length === 0) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    const processSteps = await store.reorderAboutProcessSteps(orderedIds);
+    res.json({ processSteps });
+  } catch (err) {
+    console.error('Reorder about process steps error:', err);
+    res.status(500).json({ error: 'Failed to reorder process steps.' });
+  }
+});
+
+app.post('/api/admin/about/process', requireAdmin, async (req, res) => {
+  try {
+    const title = sanitizeText(req.body?.title, 160);
+    if (title.length < 2) {
+      res.status(400).json({ error: 'Step title must be at least 2 characters.' });
+      return;
+    }
+    const stepNumber = sanitizeText(req.body?.stepNumber, 20);
+    const description = sanitizeText(req.body?.description, 1200);
+    const published = parseBoolean(req.body?.published, true);
+
+    const step = await store.createAboutProcessStep({
+      stepNumber,
+      title,
+      description,
+      published,
+    });
+    res.status(201).json({ step });
+  } catch (err) {
+    console.error('Create about process step error:', err);
+    res.status(500).json({ error: 'Failed to create process step.' });
+  }
+});
+
+app.patch('/api/admin/about/process/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const patch: Record<string, unknown> = {};
+    if (req.body?.stepNumber !== undefined) {
+      patch.stepNumber = sanitizeText(req.body.stepNumber, 20);
+    }
+    if (req.body?.title !== undefined) {
+      const title = sanitizeText(req.body.title, 160);
+      if (title.length < 2) {
+        res.status(400).json({ error: 'Step title must be at least 2 characters.' });
+        return;
+      }
+      patch.title = title;
+    }
+    if (req.body?.description !== undefined) {
+      patch.description = sanitizeText(req.body.description, 1200);
+    }
+    if (req.body?.published !== undefined) {
+      patch.published = parseBoolean(req.body.published, true);
+    }
+    if (typeof req.body?.sortOrder === 'number') {
+      patch.sortOrder = req.body.sortOrder;
+    }
+
+    const step = await store.updateAboutProcessStep(id, patch);
+    if (!step) {
+      res.status(404).json({ error: 'Process step not found.' });
+      return;
+    }
+    res.json({ step });
+  } catch (err) {
+    console.error('Update about process step error:', err);
+    res.status(500).json({ error: 'Failed to update process step.' });
+  }
+});
+
+app.delete('/api/admin/about/process/:id', requireAdmin, async (req, res) => {
+  try {
+    const deleted = await store.deleteAboutProcessStep(String(req.params.id));
+    if (!deleted) {
+      res.status(404).json({ error: 'Process step not found.' });
+      return;
+    }
+    res.json({ deleted: true });
+  } catch (err) {
+    console.error('Delete about process step error:', err);
+    res.status(500).json({ error: 'Failed to delete process step.' });
   }
 });
 

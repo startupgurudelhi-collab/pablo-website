@@ -122,6 +122,10 @@ export interface SiteSettings {
   instagramUrl: string;
   address: string;
   studioHours: string;
+  openingDays: string;
+  openingTime: string;
+  closingTime: string;
+  appointmentInfo: string;
   footerDescription: string;
   footerCopyright: string;
   navLabels: NavLabels;
@@ -158,4 +162,55 @@ export interface AdminOverviewStats {
   newEnquiries: number;
   totalEnquiries: number;
   totalCategories: number;
+}
+
+export interface AboutPageContent {
+  id: string;
+  heroHeading: string;
+  heroSubtitle: string;
+  heroImageUrl: string;
+  storyEyebrow: string;
+  storyHeading: string;
+  storyContent: string;
+  storyClosingStatement: string;
+  storyImageUrl: string;
+  servicesEyebrow: string;
+  servicesHeading: string;
+  processEyebrow: string;
+  processHeading: string;
+  closingHeading: string;
+  closingDescription: string;
+  closingImageUrl: string;
+  closingPrimaryButtonText: string;
+  closingPrimaryButtonUrl: string;
+  closingSecondaryButtonText: string;
+  closingSecondaryButtonUrl: string;
+  updatedAt: string;
+}
+
+export interface AboutServiceCategory {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  sortOrder: number;
+  published: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AboutProcessStep {
+  id: string;
+  stepNumber: string;
+  title: string;
+  description: string;
+  sortOrder: number;
+  published: boolean;
+  updatedAt: string;
+}
+
+export interface AboutPageData {
+  content: AboutPageContent;
+  services: AboutServiceCategory[];
+  processSteps: AboutProcessStep[];
 }

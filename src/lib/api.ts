@@ -1,4 +1,8 @@
 import type {
+  AboutPageContent,
+  AboutPageData,
+  AboutProcessStep,
+  AboutServiceCategory,
   AdminOverviewStats,
   AdminUserPublic,
   AspectRatioType,
@@ -19,6 +23,7 @@ const CMS_SYNC_CHANNEL = 'pablo-cms-sync';
 export type CmsSyncScope =
   | 'portfolio'
   | 'events'
+  | 'about'
   | 'settings'
   | 'legal'
   | 'enquiries'
@@ -166,6 +171,10 @@ export async function fetchPublicLegalPages() {
 
 export async function fetchPublicLegalPage(slug: LegalPageSlug) {
   return requestJson<{ page: LegalPage }>(`/api/public/legal/${slug}`);
+}
+
+export async function fetchPublicAbout() {
+  return requestJson<AboutPageData>('/api/public/about');
 }
 
 // Auth API
@@ -505,5 +514,152 @@ export async function updateAdminLegalPage(
     body: JSON.stringify(payload),
   });
   notifyCmsUpdated('legal');
+  return res;
+}
+
+// About Page CMS API
+export async function getAdminAbout() {
+  return requestJson<AboutPageData>('/api/admin/about');
+}
+
+export async function updateAdminAboutContent(
+  payload: Partial<Omit<AboutPageContent, 'id' | 'updatedAt'>>
+) {
+  const res = await requestJson<{ content: AboutPageContent }>('/api/admin/about/content', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+  notifyCmsUpdated('about');
+  return res;
+}
+
+export async function createAboutService(
+  payload: {
+    title: string;
+    description: string;
+    coverFile?: File | null;
+    imageUrl?: string;
+    published: boolean;
+  },
+  onProgress?: (percent: number) => void
+) {
+  const form = new FormData();
+  form.append('title', payload.title);
+  form.append('description', payload.description);
+  form.append('published', String(payload.published));
+  if (payload.coverFile) form.append('cover', payload.coverFile);
+  if (payload.imageUrl) form.append('imageUrl', payload.imageUrl);
+
+  const res = await uploadWithProgress<{ service: AboutServiceCategory }>(
+    'POST',
+    '/api/admin/about/services',
+    form,
+    onProgress
+  );
+  notifyCmsUpdated('about');
+  return res;
+}
+
+export async function updateAboutService(
+  id: string,
+  payload: {
+    title?: string;
+    description?: string;
+    coverFile?: File | null;
+    imageUrl?: string;
+    published?: boolean;
+    sortOrder?: number;
+  },
+  onProgress?: (percent: number) => void
+) {
+  if (payload.coverFile) {
+    const form = new FormData();
+    if (payload.title !== undefined) form.append('title', payload.title);
+    if (payload.description !== undefined) form.append('description', payload.description);
+    if (payload.published !== undefined) form.append('published', String(payload.published));
+    if (payload.sortOrder !== undefined) form.append('sortOrder', String(payload.sortOrder));
+    form.append('cover', payload.coverFile);
+
+    const res = await uploadWithProgress<{ service: AboutServiceCategory }>(
+      'PATCH',
+      `/api/admin/about/services/${id}`,
+      form,
+      onProgress
+    );
+    notifyCmsUpdated('about');
+    return res;
+  }
+
+  const res = await requestJson<{ service: AboutServiceCategory }>(`/api/admin/about/services/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  notifyCmsUpdated('about');
+  return res;
+}
+
+export async function reorderAboutServices(orderedIds: string[]) {
+  const res = await requestJson<{ services: AboutServiceCategory[] }>(
+    '/api/admin/about/services/reorder',
+    {
+      method: 'PUT',
+      body: JSON.stringify({ orderedIds }),
+    }
+  );
+  notifyCmsUpdated('about');
+  return res;
+}
+
+export async function deleteAboutService(id: string) {
+  const res = await requestJson<{ deleted: boolean; id: string }>(`/api/admin/about/services/${id}`, {
+    method: 'DELETE',
+  });
+  notifyCmsUpdated('about');
+  return res;
+}
+
+export async function createAboutProcessStep(payload: {
+  stepNumber: string;
+  title: string;
+  description: string;
+  published: boolean;
+}) {
+  const res = await requestJson<{ step: AboutProcessStep }>('/api/admin/about/process', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  notifyCmsUpdated('about');
+  return res;
+}
+
+export async function updateAboutProcessStep(
+  id: string,
+  payload: Partial<Pick<AboutProcessStep, 'stepNumber' | 'title' | 'description' | 'published' | 'sortOrder'>>
+) {
+  const res = await requestJson<{ step: AboutProcessStep }>(`/api/admin/about/process/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  notifyCmsUpdated('about');
+  return res;
+}
+
+export async function reorderAboutProcessSteps(orderedIds: string[]) {
+  const res = await requestJson<{ processSteps: AboutProcessStep[] }>(
+    '/api/admin/about/process/reorder',
+    {
+      method: 'PUT',
+      body: JSON.stringify({ orderedIds }),
+    }
+  );
+  notifyCmsUpdated('about');
+  return res;
+}
+
+export async function deleteAboutProcessStep(id: string) {
+  const res = await requestJson<{ deleted: boolean }>(`/api/admin/about/process/${id}`, {
+    method: 'DELETE',
+  });
+  notifyCmsUpdated('about');
   return res;
 }

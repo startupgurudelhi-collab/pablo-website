@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Check, Instagram, Mail, MapPin, MessageCircle, Phone } from 'lucide-react';
 import { submitEnquiry } from '../lib/api';
 import type { SiteSettings } from '../types/studio';
-import { formatWhatsAppUrl } from '../components/PublicLayout';
+import { formatStudioSchedule, formatWhatsAppUrl } from '../components/PublicLayout';
 
 interface ContactPageProps {
   settings: SiteSettings | null;
@@ -37,15 +37,18 @@ export function ContactPage({ settings }: ContactPageProps) {
     }
   }, [serviceOptions, serviceRequired]);
 
-  const whatsappRaw = settings?.whatsappNumber || settings?.socialLinks?.whatsapp || '';
+  const whatsappRaw = (settings?.whatsappNumber || settings?.socialLinks?.whatsapp || '').trim();
   const whatsappUrl = whatsappRaw ? formatWhatsAppUrl(whatsappRaw) : '';
-  const instagramUrl = settings?.instagramUrl || settings?.socialLinks?.instagram || '';
+  const instagramUrl = (settings?.instagramUrl || settings?.socialLinks?.instagram || '').trim();
+  const { scheduleLine, appointmentInfo } = formatStudioSchedule(settings);
   const hasDirectChannels = Boolean(
     whatsappUrl ||
-      settings?.contactPhone ||
+      settings?.contactPhone?.trim() ||
       instagramUrl ||
-      settings?.contactEmail ||
-      settings?.address
+      settings?.contactEmail?.trim() ||
+      settings?.address?.trim() ||
+      scheduleLine ||
+      appointmentInfo
   );
 
   const handleSubmit = async (e: FormEvent) => {
@@ -163,9 +166,10 @@ export function ContactPage({ settings }: ContactPageProps) {
                 </div>
               )}
 
-              {settings?.studioHours && (
-                <div className="pt-2 text-xs text-[#766E64]">
-                  <p>Hours: {settings.studioHours}</p>
+              {(scheduleLine || appointmentInfo) && (
+                <div className="pt-2 text-xs text-[#766E64] space-y-1">
+                  {scheduleLine && <p>{scheduleLine}</p>}
+                  {appointmentInfo && <p>{appointmentInfo}</p>}
                 </div>
               )}
 

@@ -11,6 +11,7 @@ import {
   type AdminUserRecord,
   type DatabaseSchema,
   type StudioStore,
+  createDefaultAboutData,
   createDefaultLegalPages,
   createDefaultSiteSettings,
   createInitialSeedData,
@@ -18,6 +19,10 @@ import {
   slugify,
 } from './seedDefaults.ts';
 import type {
+  AboutPageContent,
+  AboutPageData,
+  AboutProcessStep,
+  AboutServiceCategory,
   AdminUserPublic,
   AspectRatioType,
   Enquiry,
@@ -62,6 +67,14 @@ function migrateLoadedDb(rawDb: Partial<DatabaseSchema>): DatabaseSchema {
       existingSettings.contactServices.length > 0
         ? existingSettings.contactServices
         : defaults.contactServices,
+    studioHours:
+      existingSettings.studioHours === 'Tuesday – Saturday, 10:30 AM – 7:00 PM (By Appointment)'
+        ? ''
+        : existingSettings.studioHours ?? defaults.studioHours,
+    openingDays: existingSettings.openingDays ?? '',
+    openingTime: existingSettings.openingTime ?? '',
+    closingTime: existingSettings.closingTime ?? '',
+    appointmentInfo: existingSettings.appointmentInfo ?? '',
   };
 
   let events = Array.isArray(rawDb.events) ? rawDb.events : undefined;
@@ -78,6 +91,19 @@ function migrateLoadedDb(rawDb: Partial<DatabaseSchema>): DatabaseSchema {
       ? rawDb.legalPages
       : createDefaultLegalPages(now);
 
+  const defaultAbout = createDefaultAboutData(now);
+  const aboutPage: AboutPageContent = rawDb.aboutPage
+    ? { ...defaultAbout.aboutPage, ...rawDb.aboutPage }
+    : defaultAbout.aboutPage;
+
+  const aboutServices = Array.isArray(rawDb.aboutServices)
+    ? rawDb.aboutServices
+    : defaultAbout.aboutServices;
+
+  const aboutProcessSteps = Array.isArray(rawDb.aboutProcessSteps)
+    ? rawDb.aboutProcessSteps
+    : defaultAbout.aboutProcessSteps;
+
   return {
     adminUsers: rawDb.adminUsers || [],
     categories: rawDb.categories || [],
@@ -86,6 +112,9 @@ function migrateLoadedDb(rawDb: Partial<DatabaseSchema>): DatabaseSchema {
     eventMedia: eventMedia || [],
     legalPages,
     siteSettings: mergedSettings,
+    aboutPage,
+    aboutServices,
+    aboutProcessSteps,
     enquiries: rawDb.enquiries || [],
     sessions: rawDb.sessions || [],
   };
@@ -589,6 +618,17 @@ export const localStore: StudioStore = {
     ) {
       return true;
     }
+    const a = db.aboutPage;
+    if (
+      a.heroImageUrl === url ||
+      a.storyImageUrl === url ||
+      a.closingImageUrl === url
+    ) {
+      return true;
+    }
+    if (db.aboutServices.some((svc) => svc.id !== excludeId && svc.imageUrl === url)) {
+      return true;
+    }
     return false;
   },
 
@@ -706,6 +746,169 @@ export const localStore: StudioStore = {
       totalEnquiries: db.enquiries.length,
       totalCategories: db.categories.length,
     };
+  },
+
+  async getAboutPageData(publishedOnly = false): Promise<AboutPageData> {
+    const db = loadDb();
+    const services = [...db.aboutServices]
+      .filter((svc) => (publishedOnly ? svc.published : true))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt));
+    const processSteps = [...db.aboutProcessSteps]
+      .filter((step) => (publishedOnly ? step.published : true))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    return {
+      content: { ...db.aboutPage },
+      services,
+      processSteps,
+    };
+  },
+
+  async updateAboutContent(
+    patch: Partial<Omit<AboutPageContent, 'id' | 'updatedAt'>>
+  ): Promise<AboutPageContent> {
+    const db = loadDb();
+    db.aboutPage = {
+      ...db.aboutPage,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    await persistDb(db);
+    return { ...db.aboutPage };
+  },
+
+  async createAboutService(input: {
+    title: string;
+    description: string;
+    imageUrl: string;
+    published: boolean;
+    sortOrder?: number;
+  }): Promise<AboutServiceCategory> {
+    const db = loadDb();
+    const now = new Date().toISOString();
+    const maxSort = db.aboutServices.reduce((max, s) => Math.max(max, s.sortOrder), 0);
+    const created: AboutServiceCategory = {
+      id: `about_svc_${crypto.randomUUID().slice(0, 8)}`,
+      title: input.title.trim(),
+      description: input.description.trim(),
+      imageUrl: input.imageUrl.trim(),
+      sortOrder: input.sortOrder !== undefined ? input.sortOrder : maxSort + 1,
+      published: Boolean(input.published),
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.aboutServices.push(created);
+    await persistDb(db);
+    return created;
+  },
+
+  async updateAboutService(
+    id: string,
+    patch: Partial<
+      Pick<AboutServiceCategory, 'title' | 'description' | 'imageUrl' | 'published' | 'sortOrder'>
+    >
+  ): Promise<AboutServiceCategory | null> {
+    const db = loadDb();
+    const idx = db.aboutServices.findIndex((s) => s.id === id);
+    if (idx === -1) return null;
+    db.aboutServices[idx] = {
+      ...db.aboutServices[idx],
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    await persistDb(db);
+    return db.aboutServices[idx];
+  },
+
+  async reorderAboutServices(orderedIds: string[]): Promise<AboutServiceCategory[]> {
+    const db = loadDb();
+    const orderMap = new Map(orderedIds.map((id, index) => [id, index + 1]));
+    let tailOrder = orderedIds.length + 1;
+    db.aboutServices = db.aboutServices
+      .map((svc) => ({
+        ...svc,
+        sortOrder: orderMap.get(svc.id) ?? tailOrder++,
+      }))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    await persistDb(db);
+    return [...db.aboutServices];
+  },
+
+  async deleteAboutService(id: string): Promise<AboutServiceCategory | null> {
+    const db = loadDb();
+    const idx = db.aboutServices.findIndex((s) => s.id === id);
+    if (idx === -1) return null;
+    const [removed] = db.aboutServices.splice(idx, 1);
+    await persistDb(db);
+    return removed;
+  },
+
+  async createAboutProcessStep(input: {
+    stepNumber: string;
+    title: string;
+    description: string;
+    published: boolean;
+    sortOrder?: number;
+  }): Promise<AboutProcessStep> {
+    const db = loadDb();
+    const now = new Date().toISOString();
+    const maxSort = db.aboutProcessSteps.reduce((max, s) => Math.max(max, s.sortOrder), 0);
+    const created: AboutProcessStep = {
+      id: `about_step_${crypto.randomUUID().slice(0, 8)}`,
+      stepNumber: input.stepNumber.trim() || String(maxSort + 1).padStart(2, '0'),
+      title: input.title.trim(),
+      description: input.description.trim(),
+      sortOrder: input.sortOrder !== undefined ? input.sortOrder : maxSort + 1,
+      published: Boolean(input.published),
+      updatedAt: now,
+    };
+    db.aboutProcessSteps.push(created);
+    await persistDb(db);
+    return created;
+  },
+
+  async updateAboutProcessStep(
+    id: string,
+    patch: Partial<
+      Pick<AboutProcessStep, 'stepNumber' | 'title' | 'description' | 'published' | 'sortOrder'>
+    >
+  ): Promise<AboutProcessStep | null> {
+    const db = loadDb();
+    const idx = db.aboutProcessSteps.findIndex((s) => s.id === id);
+    if (idx === -1) return null;
+    db.aboutProcessSteps[idx] = {
+      ...db.aboutProcessSteps[idx],
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    await persistDb(db);
+    return db.aboutProcessSteps[idx];
+  },
+
+  async reorderAboutProcessSteps(orderedIds: string[]): Promise<AboutProcessStep[]> {
+    const db = loadDb();
+    const orderMap = new Map(orderedIds.map((id, index) => [id, index + 1]));
+    let tailOrder = orderedIds.length + 1;
+    db.aboutProcessSteps = db.aboutProcessSteps
+      .map((step) => {
+        const nextOrder = orderMap.get(step.id) ?? tailOrder++;
+        return {
+          ...step,
+          sortOrder: nextOrder,
+          stepNumber: String(nextOrder).padStart(2, '0'),
+        };
+      })
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    await persistDb(db);
+    return [...db.aboutProcessSteps];
+  },
+
+  async deleteAboutProcessStep(id: string): Promise<boolean> {
+    const db = loadDb();
+    const before = db.aboutProcessSteps.length;
+    db.aboutProcessSteps = db.aboutProcessSteps.filter((s) => s.id !== id);
+    if (db.aboutProcessSteps.length === before) return false;
+    await persistDb(db);
+    return true;
   },
 };
 

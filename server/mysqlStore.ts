@@ -12,12 +12,17 @@ import {
 import {
   type AdminUserRecord,
   type StudioStore,
+  createDefaultAboutData,
   createDefaultLegalPages,
   createDefaultSiteSettings,
   createInitialSeedData,
   slugify,
 } from './seedDefaults.ts';
 import type {
+  AboutPageContent,
+  AboutPageData,
+  AboutProcessStep,
+  AboutServiceCategory,
   AdminUserPublic,
   AspectRatioType,
   Enquiry,
@@ -177,6 +182,10 @@ const SCHEMA_STATEMENTS: string[] = [
     instagram_url VARCHAR(350) NOT NULL,
     address TEXT NOT NULL,
     studio_hours VARCHAR(255) NOT NULL,
+    opening_days VARCHAR(160) NOT NULL,
+    opening_time VARCHAR(80) NOT NULL,
+    closing_time VARCHAR(80) NOT NULL,
+    appointment_info VARCHAR(255) NOT NULL,
     footer_description TEXT NOT NULL,
     footer_copyright VARCHAR(300) NOT NULL,
     nav_labels_json LONGTEXT NOT NULL,
@@ -195,6 +204,56 @@ const SCHEMA_STATEMENTS: string[] = [
     created_at VARCHAR(40) NOT NULL,
     PRIMARY KEY (id),
     KEY idx_enquiries_status_created (status, created_at)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS about_page (
+    id VARCHAR(64) NOT NULL,
+    hero_heading VARCHAR(240) NOT NULL,
+    hero_subtitle VARCHAR(400) NOT NULL,
+    hero_image_url VARCHAR(512) NOT NULL,
+    story_eyebrow VARCHAR(120) NOT NULL,
+    story_heading VARCHAR(240) NOT NULL,
+    story_content LONGTEXT NOT NULL,
+    story_closing_statement TEXT NOT NULL,
+    story_image_url VARCHAR(512) NOT NULL,
+    services_eyebrow VARCHAR(120) NOT NULL,
+    services_heading VARCHAR(240) NOT NULL,
+    process_eyebrow VARCHAR(120) NOT NULL,
+    process_heading VARCHAR(240) NOT NULL,
+    closing_heading VARCHAR(240) NOT NULL,
+    closing_description TEXT NOT NULL,
+    closing_image_url VARCHAR(512) NOT NULL,
+    closing_primary_button_text VARCHAR(120) NOT NULL,
+    closing_primary_button_url VARCHAR(255) NOT NULL,
+    closing_secondary_button_text VARCHAR(120) NOT NULL,
+    closing_secondary_button_url VARCHAR(255) NOT NULL,
+    updated_at VARCHAR(40) NOT NULL,
+    PRIMARY KEY (id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS about_services (
+    id VARCHAR(64) NOT NULL,
+    title VARCHAR(180) NOT NULL,
+    description TEXT NOT NULL,
+    image_url VARCHAR(512) NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    published TINYINT(1) NOT NULL DEFAULT 1,
+    created_at VARCHAR(40) NOT NULL,
+    updated_at VARCHAR(40) NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_about_services_pub_sort (published, sort_order)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS about_process_steps (
+    id VARCHAR(64) NOT NULL,
+    step_number VARCHAR(24) NOT NULL,
+    title VARCHAR(180) NOT NULL,
+    description TEXT NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    published TINYINT(1) NOT NULL DEFAULT 1,
+    updated_at VARCHAR(40) NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_about_process_pub_sort (published, sort_order)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ];
 
@@ -375,7 +434,14 @@ function mapSettingsRow(row: RowDataPacket): SiteSettings {
     contactEmail: String(row.contact_email || ''),
     instagramUrl,
     address: String(row.address || ''),
-    studioHours: String(row.studio_hours || ''),
+    studioHours:
+      String(row.studio_hours || '') === 'Tuesday – Saturday, 10:30 AM – 7:00 PM (By Appointment)'
+        ? ''
+        : String(row.studio_hours || ''),
+    openingDays: String(row.opening_days || ''),
+    openingTime: String(row.opening_time || ''),
+    closingTime: String(row.closing_time || ''),
+    appointmentInfo: String(row.appointment_info || ''),
     footerDescription: String(row.footer_description || ''),
     footerCopyright: String(row.footer_copyright || ''),
     navLabels: {
@@ -389,6 +455,57 @@ function mapSettingsRow(row: RowDataPacket): SiteSettings {
       whatsapp: whatsappNumber,
     },
     updatedAt: String(row.updated_at || defaults.updatedAt),
+  };
+}
+
+function mapAboutPageRow(row: RowDataPacket): AboutPageContent {
+  return {
+    id: String(row.id || 'default'),
+    heroHeading: String(row.hero_heading || ''),
+    heroSubtitle: String(row.hero_subtitle || ''),
+    heroImageUrl: String(row.hero_image_url || ''),
+    storyEyebrow: String(row.story_eyebrow || ''),
+    storyHeading: String(row.story_heading || ''),
+    storyContent: String(row.story_content || ''),
+    storyClosingStatement: String(row.story_closing_statement || ''),
+    storyImageUrl: String(row.story_image_url || ''),
+    servicesEyebrow: String(row.services_eyebrow || ''),
+    servicesHeading: String(row.services_heading || ''),
+    processEyebrow: String(row.process_eyebrow || ''),
+    processHeading: String(row.process_heading || ''),
+    closingHeading: String(row.closing_heading || ''),
+    closingDescription: String(row.closing_description || ''),
+    closingImageUrl: String(row.closing_image_url || ''),
+    closingPrimaryButtonText: String(row.closing_primary_button_text || ''),
+    closingPrimaryButtonUrl: String(row.closing_primary_button_url || '/work'),
+    closingSecondaryButtonText: String(row.closing_secondary_button_text || ''),
+    closingSecondaryButtonUrl: String(row.closing_secondary_button_url || '/contact'),
+    updatedAt: String(row.updated_at || new Date().toISOString()),
+  };
+}
+
+function mapAboutServiceRow(row: RowDataPacket): AboutServiceCategory {
+  return {
+    id: String(row.id),
+    title: String(row.title),
+    description: String(row.description || ''),
+    imageUrl: String(row.image_url || ''),
+    sortOrder: Number(row.sort_order || 0),
+    published: Boolean(row.published),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+function mapAboutProcessRow(row: RowDataPacket): AboutProcessStep {
+  return {
+    id: String(row.id),
+    stepNumber: String(row.step_number || '01'),
+    title: String(row.title),
+    description: String(row.description || ''),
+    sortOrder: Number(row.sort_order || 0),
+    published: Boolean(row.published),
+    updatedAt: String(row.updated_at),
   };
 }
 
@@ -445,6 +562,7 @@ async function seedDatabaseIfNeeded(pool: Pool): Promise<void> {
         about_image_url, about_image_type, contact_headline, contact_intro, contact_form_heading,
         contact_form_description, contact_form_button_text, contact_services_json, contact_phone,
         whatsapp_number, contact_email, instagram_url, address, studio_hours,
+        opening_days, opening_time, closing_time, appointment_info,
         footer_description, footer_copyright, nav_labels_json, social_links_json, updated_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
@@ -455,6 +573,7 @@ async function seedDatabaseIfNeeded(pool: Pool): Promise<void> {
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
+        ?, ?, ?, ?,
         ?, ?, ?, ?, ?
       )`,
       [
@@ -496,6 +615,10 @@ async function seedDatabaseIfNeeded(pool: Pool): Promise<void> {
         s.instagramUrl,
         s.address,
         s.studioHours,
+        s.openingDays,
+        s.openingTime,
+        s.closingTime,
+        s.appointmentInfo,
         s.footerDescription,
         s.footerCopyright,
         JSON.stringify(s.navLabels),
@@ -577,6 +700,117 @@ async function seedDatabaseIfNeeded(pool: Pool): Promise<void> {
         );
       }
     }
+  } else {
+    await pool.execute(
+      'UPDATE site_settings SET studio_hours = ? WHERE id = ? AND studio_hours = ?',
+      ['', 'default', 'Tuesday – Saturday, 10:30 AM – 7:00 PM (By Appointment)']
+    );
+  }
+
+  const [aboutRows] = await pool.execute<RowDataPacket[]>(
+    'SELECT id FROM about_page WHERE id = ? LIMIT 1',
+    ['default']
+  );
+  if (aboutRows.length === 0) {
+    const defaultAbout = createDefaultAboutData(new Date().toISOString());
+    const a = defaultAbout.aboutPage;
+    await pool.execute(
+      `INSERT IGNORE INTO about_page (
+        id, hero_heading, hero_subtitle, hero_image_url,
+        story_eyebrow, story_heading, story_content, story_closing_statement, story_image_url,
+        services_eyebrow, services_heading, process_eyebrow, process_heading,
+        closing_heading, closing_description, closing_image_url,
+        closing_primary_button_text, closing_primary_button_url,
+        closing_secondary_button_text, closing_secondary_button_url, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        a.id,
+        a.heroHeading,
+        a.heroSubtitle,
+        a.heroImageUrl,
+        a.storyEyebrow,
+        a.storyHeading,
+        a.storyContent,
+        a.storyClosingStatement,
+        a.storyImageUrl,
+        a.servicesEyebrow,
+        a.servicesHeading,
+        a.processEyebrow,
+        a.processHeading,
+        a.closingHeading,
+        a.closingDescription,
+        a.closingImageUrl,
+        a.closingPrimaryButtonText,
+        a.closingPrimaryButtonUrl,
+        a.closingSecondaryButtonText,
+        a.closingSecondaryButtonUrl,
+        a.updatedAt,
+      ]
+    );
+
+    const [svcCountRows] = await pool.execute<RowDataPacket[]>(
+      'SELECT COUNT(*) AS cnt FROM about_services'
+    );
+    if (Number(svcCountRows[0]?.cnt || 0) === 0) {
+      for (const svc of defaultAbout.aboutServices) {
+        await pool.execute(
+          `INSERT IGNORE INTO about_services
+           (id, title, description, image_url, sort_order, published, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            svc.id,
+            svc.title,
+            svc.description,
+            svc.imageUrl,
+            svc.sortOrder,
+            svc.published ? 1 : 0,
+            svc.createdAt,
+            svc.updatedAt,
+          ]
+        );
+      }
+    }
+
+    const [stepCountRows] = await pool.execute<RowDataPacket[]>(
+      'SELECT COUNT(*) AS cnt FROM about_process_steps'
+    );
+    if (Number(stepCountRows[0]?.cnt || 0) === 0) {
+      for (const step of defaultAbout.aboutProcessSteps) {
+        await pool.execute(
+          `INSERT IGNORE INTO about_process_steps
+           (id, step_number, title, description, sort_order, published, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            step.id,
+            step.stepNumber,
+            step.title,
+            step.description,
+            step.sortOrder,
+            step.published ? 1 : 0,
+            step.updatedAt,
+          ]
+        );
+      }
+    }
+  }
+}
+
+async function ensureSiteSettingsColumns(pool: Pool): Promise<void> {
+  const columnsToEnsure: Array<{ name: string; ddl: string }> = [
+    { name: 'opening_days', ddl: "VARCHAR(160) NOT NULL DEFAULT ''" },
+    { name: 'opening_time', ddl: "VARCHAR(80) NOT NULL DEFAULT ''" },
+    { name: 'closing_time', ddl: "VARCHAR(80) NOT NULL DEFAULT ''" },
+    { name: 'appointment_info', ddl: "VARCHAR(255) NOT NULL DEFAULT ''" },
+  ];
+  for (const col of columnsToEnsure) {
+    const [existingCols] = await pool.execute<RowDataPacket[]>(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'site_settings' AND COLUMN_NAME = ?`,
+      [col.name]
+    );
+    if (existingCols.length === 0) {
+      await pool.query(`ALTER TABLE site_settings ADD COLUMN \`${col.name}\` ${col.ddl}`);
+    }
   }
 }
 
@@ -587,6 +821,7 @@ async function ensureReady(): Promise<Pool> {
       for (const ddl of SCHEMA_STATEMENTS) {
         await pool.query(ddl);
       }
+      await ensureSiteSettingsColumns(pool);
       await seedDatabaseIfNeeded(pool);
     })().catch((err) => {
       readyPromise = null;
@@ -671,6 +906,7 @@ export const mysqlStore: StudioStore = {
         about_image_url = ?, about_image_type = ?, contact_headline = ?, contact_intro = ?, contact_form_heading = ?,
         contact_form_description = ?, contact_form_button_text = ?, contact_services_json = ?, contact_phone = ?,
         whatsapp_number = ?, contact_email = ?, instagram_url = ?, address = ?, studio_hours = ?,
+        opening_days = ?, opening_time = ?, closing_time = ?, appointment_info = ?,
         footer_description = ?, footer_copyright = ?, nav_labels_json = ?, social_links_json = ?, updated_at = ?
       WHERE id = ?`,
       [
@@ -711,6 +947,10 @@ export const mysqlStore: StudioStore = {
         next.instagramUrl,
         next.address,
         next.studioHours,
+        next.openingDays,
+        next.openingTime,
+        next.closingTime,
+        next.appointmentInfo,
         next.footerDescription,
         next.footerCopyright,
         JSON.stringify(next.navLabels),
@@ -1320,7 +1560,21 @@ export const mysqlStore: StudioStore = {
        WHERE id <> ? AND (media_url = ? OR thumbnail_url = ?)`,
       [excluded, url, url]
     );
-    return Number(eventMediaRows[0]?.cnt || 0) > 0;
+    if (Number(eventMediaRows[0]?.cnt || 0) > 0) return true;
+
+    const [aboutRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM about_page
+       WHERE hero_image_url = ? OR story_image_url = ? OR closing_image_url = ?`,
+      [url, url, url]
+    );
+    if (Number(aboutRows[0]?.cnt || 0) > 0) return true;
+
+    const [aboutSvcRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM about_services
+       WHERE id <> ? AND image_url = ?`,
+      [excluded, url]
+    );
+    return Number(aboutSvcRows[0]?.cnt || 0) > 0;
   },
 
   async getEnquiries(): Promise<Enquiry[]> {
@@ -1505,5 +1759,290 @@ export const mysqlStore: StudioStore = {
       totalEnquiries: Number(q.total_enquiries || 0),
       totalCategories: Number(c.total_categories || 0),
     };
+  },
+
+  async getAboutPageData(publishedOnly = false): Promise<AboutPageData> {
+    const pool = await ensureReady();
+    const [pageRows] = await pool.execute<RowDataPacket[]>(
+      'SELECT * FROM about_page WHERE id = ? LIMIT 1',
+      ['default']
+    );
+    const defaults = createDefaultAboutData(new Date().toISOString());
+    const content = pageRows.length > 0 ? mapAboutPageRow(pageRows[0]) : defaults.aboutPage;
+
+    const svcSql = publishedOnly
+      ? 'SELECT * FROM about_services WHERE published = 1 ORDER BY sort_order ASC, created_at ASC'
+      : 'SELECT * FROM about_services ORDER BY sort_order ASC, created_at ASC';
+    const [svcRows] = await pool.execute<RowDataPacket[]>(svcSql);
+
+    const stepSql = publishedOnly
+      ? 'SELECT * FROM about_process_steps WHERE published = 1 ORDER BY sort_order ASC'
+      : 'SELECT * FROM about_process_steps ORDER BY sort_order ASC';
+    const [stepRows] = await pool.execute<RowDataPacket[]>(stepSql);
+
+    return {
+      content,
+      services: svcRows.map(mapAboutServiceRow),
+      processSteps: stepRows.map(mapAboutProcessRow),
+    };
+  },
+
+  async updateAboutContent(
+    patch: Partial<Omit<AboutPageContent, 'id' | 'updatedAt'>>
+  ): Promise<AboutPageContent> {
+    const pool = await ensureReady();
+    const current = (await this.getAboutPageData(false)).content;
+    const next: AboutPageContent = {
+      ...current,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await pool.execute(
+      `UPDATE about_page SET
+        hero_heading = ?, hero_subtitle = ?, hero_image_url = ?,
+        story_eyebrow = ?, story_heading = ?, story_content = ?, story_closing_statement = ?, story_image_url = ?,
+        services_eyebrow = ?, services_heading = ?, process_eyebrow = ?, process_heading = ?,
+        closing_heading = ?, closing_description = ?, closing_image_url = ?,
+        closing_primary_button_text = ?, closing_primary_button_url = ?,
+        closing_secondary_button_text = ?, closing_secondary_button_url = ?, updated_at = ?
+      WHERE id = ?`,
+      [
+        next.heroHeading,
+        next.heroSubtitle,
+        next.heroImageUrl,
+        next.storyEyebrow,
+        next.storyHeading,
+        next.storyContent,
+        next.storyClosingStatement,
+        next.storyImageUrl,
+        next.servicesEyebrow,
+        next.servicesHeading,
+        next.processEyebrow,
+        next.processHeading,
+        next.closingHeading,
+        next.closingDescription,
+        next.closingImageUrl,
+        next.closingPrimaryButtonText,
+        next.closingPrimaryButtonUrl,
+        next.closingSecondaryButtonText,
+        next.closingSecondaryButtonUrl,
+        next.updatedAt,
+        'default',
+      ]
+    );
+    return next;
+  },
+
+  async createAboutService(input: {
+    title: string;
+    description: string;
+    imageUrl: string;
+    published: boolean;
+    sortOrder?: number;
+  }): Promise<AboutServiceCategory> {
+    const pool = await ensureReady();
+    const [maxRows] = await pool.execute<RowDataPacket[]>(
+      'SELECT COALESCE(MAX(sort_order), 0) AS max_sort FROM about_services'
+    );
+    const maxSort = Number(maxRows[0]?.max_sort || 0);
+    const now = new Date().toISOString();
+    const created: AboutServiceCategory = {
+      id: `about_svc_${crypto.randomUUID().slice(0, 8)}`,
+      title: input.title.trim(),
+      description: input.description.trim(),
+      imageUrl: input.imageUrl.trim(),
+      sortOrder: input.sortOrder !== undefined ? input.sortOrder : maxSort + 1,
+      published: Boolean(input.published),
+      createdAt: now,
+      updatedAt: now,
+    };
+    await pool.execute(
+      `INSERT INTO about_services
+       (id, title, description, image_url, sort_order, published, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        created.id,
+        created.title,
+        created.description,
+        created.imageUrl,
+        created.sortOrder,
+        created.published ? 1 : 0,
+        created.createdAt,
+        created.updatedAt,
+      ]
+    );
+    return created;
+  },
+
+  async updateAboutService(
+    id: string,
+    patch: Partial<
+      Pick<AboutServiceCategory, 'title' | 'description' | 'imageUrl' | 'published' | 'sortOrder'>
+    >
+  ): Promise<AboutServiceCategory | null> {
+    const pool = await ensureReady();
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT * FROM about_services WHERE id = ? LIMIT 1',
+      [id]
+    );
+    if (rows.length === 0) return null;
+    const current = mapAboutServiceRow(rows[0]);
+    const updated: AboutServiceCategory = {
+      ...current,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    await pool.execute(
+      `UPDATE about_services
+       SET title = ?, description = ?, image_url = ?, sort_order = ?, published = ?, updated_at = ?
+       WHERE id = ?`,
+      [
+        updated.title,
+        updated.description,
+        updated.imageUrl,
+        updated.sortOrder,
+        updated.published ? 1 : 0,
+        updated.updatedAt,
+        id,
+      ]
+    );
+    return updated;
+  },
+
+  async reorderAboutServices(orderedIds: string[]): Promise<AboutServiceCategory[]> {
+    const pool = await ensureReady();
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT * FROM about_services ORDER BY sort_order ASC, created_at ASC'
+    );
+    const existing = rows.map(mapAboutServiceRow);
+    const orderMap = new Map(orderedIds.map((id, idx) => [id, idx + 1]));
+    let tailOrder = orderedIds.length + 1;
+    for (const svc of existing) {
+      const nextOrder = orderMap.get(svc.id) ?? tailOrder++;
+      await pool.execute('UPDATE about_services SET sort_order = ? WHERE id = ?', [
+        nextOrder,
+        svc.id,
+      ]);
+    }
+    const [afterRows] = await pool.execute<RowDataPacket[]>(
+      'SELECT * FROM about_services ORDER BY sort_order ASC, created_at ASC'
+    );
+    return afterRows.map(mapAboutServiceRow);
+  },
+
+  async deleteAboutService(id: string): Promise<AboutServiceCategory | null> {
+    const pool = await ensureReady();
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT * FROM about_services WHERE id = ? LIMIT 1',
+      [id]
+    );
+    if (rows.length === 0) return null;
+    const removed = mapAboutServiceRow(rows[0]);
+    await pool.execute('DELETE FROM about_services WHERE id = ?', [id]);
+    return removed;
+  },
+
+  async createAboutProcessStep(input: {
+    stepNumber: string;
+    title: string;
+    description: string;
+    published: boolean;
+    sortOrder?: number;
+  }): Promise<AboutProcessStep> {
+    const pool = await ensureReady();
+    const [maxRows] = await pool.execute<RowDataPacket[]>(
+      'SELECT COALESCE(MAX(sort_order), 0) AS max_sort FROM about_process_steps'
+    );
+    const maxSort = Number(maxRows[0]?.max_sort || 0);
+    const now = new Date().toISOString();
+    const created: AboutProcessStep = {
+      id: `about_step_${crypto.randomUUID().slice(0, 8)}`,
+      stepNumber: input.stepNumber.trim() || String(maxSort + 1).padStart(2, '0'),
+      title: input.title.trim(),
+      description: input.description.trim(),
+      sortOrder: input.sortOrder !== undefined ? input.sortOrder : maxSort + 1,
+      published: Boolean(input.published),
+      updatedAt: now,
+    };
+    await pool.execute(
+      `INSERT INTO about_process_steps
+       (id, step_number, title, description, sort_order, published, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        created.id,
+        created.stepNumber,
+        created.title,
+        created.description,
+        created.sortOrder,
+        created.published ? 1 : 0,
+        created.updatedAt,
+      ]
+    );
+    return created;
+  },
+
+  async updateAboutProcessStep(
+    id: string,
+    patch: Partial<
+      Pick<AboutProcessStep, 'stepNumber' | 'title' | 'description' | 'published' | 'sortOrder'>
+    >
+  ): Promise<AboutProcessStep | null> {
+    const pool = await ensureReady();
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT * FROM about_process_steps WHERE id = ? LIMIT 1',
+      [id]
+    );
+    if (rows.length === 0) return null;
+    const current = mapAboutProcessRow(rows[0]);
+    const updated: AboutProcessStep = {
+      ...current,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    await pool.execute(
+      `UPDATE about_process_steps
+       SET step_number = ?, title = ?, description = ?, sort_order = ?, published = ?, updated_at = ?
+       WHERE id = ?`,
+      [
+        updated.stepNumber,
+        updated.title,
+        updated.description,
+        updated.sortOrder,
+        updated.published ? 1 : 0,
+        updated.updatedAt,
+        id,
+      ]
+    );
+    return updated;
+  },
+
+  async reorderAboutProcessSteps(orderedIds: string[]): Promise<AboutProcessStep[]> {
+    const pool = await ensureReady();
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT * FROM about_process_steps ORDER BY sort_order ASC'
+    );
+    const existing = rows.map(mapAboutProcessRow);
+    const orderMap = new Map(orderedIds.map((id, idx) => [id, idx + 1]));
+    let tailOrder = orderedIds.length + 1;
+    for (const step of existing) {
+      const nextOrder = orderMap.get(step.id) ?? tailOrder++;
+      const nextNum = String(nextOrder).padStart(2, '0');
+      await pool.execute(
+        'UPDATE about_process_steps SET sort_order = ?, step_number = ? WHERE id = ?',
+        [nextOrder, nextNum, step.id]
+      );
+    }
+    const [afterRows] = await pool.execute<RowDataPacket[]>(
+      'SELECT * FROM about_process_steps ORDER BY sort_order ASC'
+    );
+    return afterRows.map(mapAboutProcessRow);
+  },
+
+  async deleteAboutProcessStep(id: string): Promise<boolean> {
+    const pool = await ensureReady();
+    const [result] = await pool.execute('DELETE FROM about_process_steps WHERE id = ?', [id]);
+    const affected = (result as { affectedRows?: number }).affectedRows || 0;
+    return affected > 0;
   },
 };
