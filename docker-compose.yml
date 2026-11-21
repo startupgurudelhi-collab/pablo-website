@@ -1,0 +1,30 @@
+services:
+  pablo-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      DATA_DIR: /app/data
+      MEDIA_DIR: /app/storage/media
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@pablo.studio}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD before deploying}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET before deploying}
+    volumes:
+      - pablo_data:/app/data
+      - pablo_media:/app/storage/media
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  pablo_data:
+  pablo_media:
