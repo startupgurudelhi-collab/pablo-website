@@ -14,6 +14,7 @@ import {
   type StudioStore,
   createDefaultAboutData,
   createDefaultLegalPages,
+  createDefaultOurWorkData,
   createDefaultSiteSettings,
   createInitialSeedData,
   slugify,
@@ -25,6 +26,9 @@ import type {
   AboutServiceCategory,
   AdminUserPublic,
   AspectRatioType,
+  CollectionLayoutStyle,
+  CollectionMediaItem,
+  CollectionsOverviewStats,
   Enquiry,
   EnquiryStatus,
   EventMediaItem,
@@ -32,11 +36,13 @@ import type {
   LegalPageSlug,
   MediaType,
   NavLabels,
+  OurWorkPageSettings,
   PortfolioCategory,
   PortfolioItem,
   SiteSettings,
   SocialLinks,
   StudioEvent,
+  WorkCollection,
 } from '../src/types/studio.ts';
 
 const SCHEMA_STATEMENTS: string[] = [
@@ -254,6 +260,56 @@ const SCHEMA_STATEMENTS: string[] = [
     updated_at VARCHAR(40) NOT NULL,
     PRIMARY KEY (id),
     KEY idx_about_process_pub_sort (published, sort_order)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS our_work_settings (
+    id VARCHAR(64) NOT NULL,
+    intro_heading VARCHAR(200) NOT NULL,
+    intro_subtitle TEXT NOT NULL,
+    intro_image_url VARCHAR(512) NOT NULL,
+    promo_visible TINYINT(1) NOT NULL DEFAULT 1,
+    promo_heading VARCHAR(240) NOT NULL,
+    promo_description TEXT NOT NULL,
+    promo_image_url VARCHAR(512) NOT NULL,
+    promo_button_text VARCHAR(120) NOT NULL,
+    promo_button_url VARCHAR(255) NOT NULL,
+    updated_at VARCHAR(40) NOT NULL,
+    PRIMARY KEY (id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS work_collections (
+    id VARCHAR(64) NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    slug VARCHAR(200) NOT NULL,
+    description TEXT NOT NULL,
+    cover_image_url VARCHAR(512) NOT NULL,
+    layout_style VARCHAR(32) NOT NULL DEFAULT 'editorial-split',
+    preview_limit INT NOT NULL DEFAULT 3,
+    sort_order INT NOT NULL DEFAULT 0,
+    published TINYINT(1) NOT NULL DEFAULT 1,
+    created_at VARCHAR(40) NOT NULL,
+    updated_at VARCHAR(40) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_work_collections_slug (slug),
+    KEY idx_work_collections_pub_sort (published, sort_order)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS collection_media (
+    id VARCHAR(64) NOT NULL,
+    collection_id VARCHAR(64) NOT NULL,
+    media_type VARCHAR(16) NOT NULL,
+    media_url VARCHAR(512) NOT NULL,
+    thumbnail_url VARCHAR(512) NOT NULL,
+    aspect_ratio VARCHAR(24) NOT NULL DEFAULT 'portrait',
+    caption VARCHAR(500) NOT NULL,
+    creation_details TEXT NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    published TINYINT(1) NOT NULL DEFAULT 1,
+    created_at VARCHAR(40) NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_collection_media_col_sort (collection_id, published, sort_order),
+    CONSTRAINT fk_collection_media_collection
+      FOREIGN KEY (collection_id) REFERENCES work_collections (id) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ];
 
@@ -507,6 +563,89 @@ function mapAboutProcessRow(row: RowDataPacket): AboutProcessStep {
     published: Boolean(row.published),
     updatedAt: String(row.updated_at),
   };
+}
+
+function mapOurWorkSettingsRow(row: RowDataPacket): OurWorkPageSettings {
+  return {
+    id: String(row.id),
+    introHeading: String(row.intro_heading || 'Our Work'),
+    introSubtitle: String(row.intro_subtitle || ''),
+    introImageUrl: String(row.intro_image_url || ''),
+    promoVisible: Boolean(row.promo_visible),
+    promoHeading: String(row.promo_heading || ''),
+    promoDescription: String(row.promo_description || ''),
+    promoImageUrl: String(row.promo_image_url || ''),
+    promoButtonText: String(row.promo_button_text || ''),
+    promoButtonUrl: String(row.promo_button_url || '/contact'),
+    updatedAt: String(row.updated_at || new Date().toISOString()),
+  };
+}
+
+function parseCollectionLayoutStyle(value: unknown): CollectionLayoutStyle {
+  if (
+    value === 'editorial-split' ||
+    value === 'grid-3' ||
+    value === 'grid-4' ||
+    value === 'asymmetric'
+  ) {
+    return value;
+  }
+  return 'editorial-split';
+}
+
+function mapWorkCollectionRow(row: RowDataPacket): WorkCollection {
+  return {
+    id: String(row.id),
+    title: String(row.title),
+    slug: String(row.slug),
+    description: String(row.description || ''),
+    coverImageUrl: String(row.cover_image_url || ''),
+    layoutStyle: parseCollectionLayoutStyle(row.layout_style),
+    previewLimit: Math.max(1, Math.min(12, Number(row.preview_limit || 3))),
+    sortOrder: Number(row.sort_order || 0),
+    published: Boolean(row.published),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+function mapCollectionMediaRow(row: RowDataPacket): CollectionMediaItem {
+  return {
+    id: String(row.id),
+    collectionId: String(row.collection_id),
+    mediaType: row.media_type === 'video' ? 'video' : 'image',
+    mediaUrl: String(row.media_url),
+    thumbnailUrl: String(row.thumbnail_url || ''),
+    aspectRatio:
+      row.aspect_ratio === 'landscape' || row.aspect_ratio === 'square'
+        ? row.aspect_ratio
+        : 'portrait',
+    caption: String(row.caption || ''),
+    creationDetails: String(row.creation_details || ''),
+    sortOrder: Number(row.sort_order || 0),
+    published: Boolean(row.published),
+    createdAt: String(row.created_at),
+  };
+}
+
+async function buildUniqueCollectionSlugMysql(
+  pool: Pool,
+  rawInput: string,
+  excludeId?: string
+): Promise<string> {
+  const base = slugify(rawInput) || 'collection';
+  let candidate = base;
+  let counter = 2;
+  while (true) {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT id FROM work_collections WHERE slug = ? LIMIT 1',
+      [candidate]
+    );
+    if (rows.length === 0 || (excludeId && String(rows[0].id) === excludeId)) {
+      return candidate;
+    }
+    candidate = `${base}-${counter++}`;
+  }
 }
 
 async function seedDatabaseIfNeeded(pool: Pool): Promise<void> {
@@ -788,6 +927,83 @@ async function seedDatabaseIfNeeded(pool: Pool): Promise<void> {
             step.sortOrder,
             step.published ? 1 : 0,
             step.updatedAt,
+          ]
+        );
+      }
+    }
+  }
+
+  const [workSettingsRows] = await pool.execute<RowDataPacket[]>(
+    'SELECT id FROM our_work_settings WHERE id = ? LIMIT 1',
+    ['default']
+  );
+  if (workSettingsRows.length === 0) {
+    const defaultWork = createDefaultOurWorkData(new Date().toISOString());
+    const w = defaultWork.ourWorkSettings;
+    await pool.execute(
+      `INSERT IGNORE INTO our_work_settings (
+        id, intro_heading, intro_subtitle, intro_image_url,
+        promo_visible, promo_heading, promo_description, promo_image_url,
+        promo_button_text, promo_button_url, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        w.id,
+        w.introHeading,
+        w.introSubtitle,
+        w.introImageUrl,
+        w.promoVisible ? 1 : 0,
+        w.promoHeading,
+        w.promoDescription,
+        w.promoImageUrl,
+        w.promoButtonText,
+        w.promoButtonUrl,
+        w.updatedAt,
+      ]
+    );
+
+    const [colCountRows] = await pool.execute<RowDataPacket[]>(
+      'SELECT COUNT(*) AS cnt FROM work_collections'
+    );
+    if (Number(colCountRows[0]?.cnt || 0) === 0) {
+      for (const col of defaultWork.workCollections) {
+        await pool.execute(
+          `INSERT IGNORE INTO work_collections (
+            id, title, slug, description, cover_image_url, layout_style,
+            preview_limit, sort_order, published, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            col.id,
+            col.title,
+            col.slug,
+            col.description,
+            col.coverImageUrl,
+            col.layoutStyle,
+            col.previewLimit,
+            col.sortOrder,
+            col.published ? 1 : 0,
+            col.createdAt,
+            col.updatedAt,
+          ]
+        );
+      }
+      for (const m of defaultWork.collectionMedia) {
+        await pool.execute(
+          `INSERT IGNORE INTO collection_media (
+            id, collection_id, media_type, media_url, thumbnail_url, aspect_ratio,
+            caption, creation_details, sort_order, published, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            m.id,
+            m.collectionId,
+            m.mediaType,
+            m.mediaUrl,
+            m.thumbnailUrl,
+            m.aspectRatio,
+            m.caption,
+            m.creationDetails,
+            m.sortOrder,
+            m.published ? 1 : 0,
+            m.createdAt,
           ]
         );
       }
@@ -1574,7 +1790,28 @@ export const mysqlStore: StudioStore = {
        WHERE id <> ? AND image_url = ?`,
       [excluded, url]
     );
-    return Number(aboutSvcRows[0]?.cnt || 0) > 0;
+    if (Number(aboutSvcRows[0]?.cnt || 0) > 0) return true;
+
+    const [workSettingsRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM our_work_settings
+       WHERE intro_image_url = ? OR promo_image_url = ?`,
+      [url, url]
+    );
+    if (Number(workSettingsRows[0]?.cnt || 0) > 0) return true;
+
+    const [colRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM work_collections
+       WHERE id <> ? AND cover_image_url = ?`,
+      [excluded, url]
+    );
+    if (Number(colRows[0]?.cnt || 0) > 0) return true;
+
+    const [colMediaRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM collection_media
+       WHERE id <> ? AND (media_url = ? OR thumbnail_url = ?)`,
+      [excluded, url, url]
+    );
+    return Number(colMediaRows[0]?.cnt || 0) > 0;
   },
 
   async getEnquiries(): Promise<Enquiry[]> {
@@ -2045,4 +2282,413 @@ export const mysqlStore: StudioStore = {
     const affected = (result as { affectedRows?: number }).affectedRows || 0;
     return affected > 0;
   },
+
+  async getOurWorkSettings(): Promise<OurWorkPageSettings> {
+    const pool = await ensureReady();
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT * FROM our_work_settings WHERE id = ? LIMIT 1',
+      ['default']
+    );
+    if (rows.length > 0) return mapOurWorkSettingsRow(rows[0]);
+    return createDefaultOurWorkData(new Date().toISOString()).ourWorkSettings;
+  },
+
+  async updateOurWorkSettings(
+    patch: Partial<Omit<OurWorkPageSettings, 'id' | 'updatedAt'>>
+  ): Promise<OurWorkPageSettings> {
+    const pool = await ensureReady();
+    const current = await this.getOurWorkSettings();
+    const next: OurWorkPageSettings = {
+      ...current,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    await pool.execute(
+      `UPDATE our_work_settings SET
+        intro_heading = ?, intro_subtitle = ?, intro_image_url = ?,
+        promo_visible = ?, promo_heading = ?, promo_description = ?,
+        promo_image_url = ?, promo_button_text = ?, promo_button_url = ?,
+        updated_at = ?
+      WHERE id = ?`,
+      [
+        next.introHeading,
+        next.introSubtitle,
+        next.introImageUrl,
+        next.promoVisible ? 1 : 0,
+        next.promoHeading,
+        next.promoDescription,
+        next.promoImageUrl,
+        next.promoButtonText,
+        next.promoButtonUrl,
+        next.updatedAt,
+        'default',
+      ]
+    );
+    return next;
+  },
+
+  async getCollections(options?: { publishedOnly?: boolean }): Promise<WorkCollection[]> {
+    const pool = await ensureReady();
+    const publishedOnly = Boolean(options?.publishedOnly);
+    const colSql = publishedOnly
+      ? 'SELECT * FROM work_collections WHERE published = 1 ORDER BY sort_order ASC, created_at ASC'
+      : 'SELECT * FROM work_collections ORDER BY sort_order ASC, created_at ASC';
+    const [colRows] = await pool.execute<RowDataPacket[]>(colSql);
+    if (colRows.length === 0) return [];
+
+    const mediaSql = publishedOnly
+      ? 'SELECT * FROM collection_media WHERE published = 1 ORDER BY sort_order ASC, created_at ASC'
+      : 'SELECT * FROM collection_media ORDER BY sort_order ASC, created_at ASC';
+    const [mediaRows] = await pool.execute<RowDataPacket[]>(mediaSql);
+
+    const mediaByCol = new Map<string, CollectionMediaItem[]>();
+    for (const row of mediaRows) {
+      const item = mapCollectionMediaRow(row);
+      const list = mediaByCol.get(item.collectionId) || [];
+      list.push(item);
+      mediaByCol.set(item.collectionId, list);
+    }
+
+    return colRows.map((row) => {
+      const col = mapWorkCollectionRow(row);
+      return { ...col, media: mediaByCol.get(col.id) || [] };
+    });
+  },
+
+  async getCollectionBySlug(slug: string, publishedOnly = false): Promise<WorkCollection | null> {
+    const pool = await ensureReady();
+    const normalized = slug.trim().toLowerCase();
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT * FROM work_collections WHERE LOWER(slug) = ? LIMIT 1',
+      [normalized]
+    );
+    if (rows.length === 0) return null;
+    const col = mapWorkCollectionRow(rows[0]);
+    if (publishedOnly && !col.published) return null;
+
+    const mediaSql = publishedOnly
+      ? 'SELECT * FROM collection_media WHERE collection_id = ? AND published = 1 ORDER BY sort_order ASC, created_at ASC'
+      : 'SELECT * FROM collection_media WHERE collection_id = ? ORDER BY sort_order ASC, created_at ASC';
+    const [mediaRows] = await pool.execute<RowDataPacket[]>(mediaSql, [col.id]);
+    return { ...col, media: mediaRows.map(mapCollectionMediaRow) };
+  },
+
+  async getCollectionById(id: string): Promise<WorkCollection | null> {
+    const pool = await ensureReady();
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT * FROM work_collections WHERE id = ? LIMIT 1',
+      [id]
+    );
+    if (rows.length === 0) return null;
+    const col = mapWorkCollectionRow(rows[0]);
+    const [mediaRows] = await pool.execute<RowDataPacket[]>(
+      'SELECT * FROM collection_media WHERE collection_id = ? ORDER BY sort_order ASC, created_at ASC',
+      [col.id]
+    );
+    return { ...col, media: mediaRows.map(mapCollectionMediaRow) };
+  },
+
+  async createCollection(input: {
+    title: string;
+    slug?: string;
+    description: string;
+    coverImageUrl: string;
+    layoutStyle: CollectionLayoutStyle;
+    previewLimit: number;
+    published: boolean;
+  }): Promise<WorkCollection> {
+    const pool = await ensureReady();
+    const [maxRows] = await pool.execute<RowDataPacket[]>(
+      'SELECT COALESCE(MAX(sort_order), 0) AS max_sort FROM work_collections'
+    );
+    const maxSort = Number(maxRows[0]?.max_sort || 0);
+    const slug = await buildUniqueCollectionSlugMysql(pool, input.slug || input.title);
+    const now = new Date().toISOString();
+
+    const created: WorkCollection = {
+      id: `col_${crypto.randomUUID().slice(0, 10)}`,
+      title: input.title.trim(),
+      slug,
+      description: input.description.trim(),
+      coverImageUrl: input.coverImageUrl.trim(),
+      layoutStyle: input.layoutStyle,
+      previewLimit: Math.max(1, Math.min(12, Math.round(input.previewLimit || 3))),
+      sortOrder: maxSort + 1,
+      published: Boolean(input.published),
+      createdAt: now,
+      updatedAt: now,
+      media: [],
+    };
+
+    await pool.execute(
+      `INSERT INTO work_collections (
+        id, title, slug, description, cover_image_url, layout_style,
+        preview_limit, sort_order, published, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        created.id,
+        created.title,
+        created.slug,
+        created.description,
+        created.coverImageUrl,
+        created.layoutStyle,
+        created.previewLimit,
+        created.sortOrder,
+        created.published ? 1 : 0,
+        created.createdAt,
+        created.updatedAt,
+      ]
+    );
+    return created;
+  },
+
+  async updateCollection(
+    id: string,
+    patch: Partial<
+      Pick<
+        WorkCollection,
+        | 'title'
+        | 'slug'
+        | 'description'
+        | 'coverImageUrl'
+        | 'layoutStyle'
+        | 'previewLimit'
+        | 'sortOrder'
+        | 'published'
+      >
+    >
+  ): Promise<WorkCollection | null> {
+    const pool = await ensureReady();
+    const existing = await this.getCollectionById(id);
+    if (!existing) return null;
+
+    const nextSlug =
+      patch.slug !== undefined && patch.slug.trim()
+        ? await buildUniqueCollectionSlugMysql(pool, patch.slug, id)
+        : existing.slug;
+
+    const updated: WorkCollection = {
+      ...existing,
+      ...patch,
+      slug: nextSlug,
+      previewLimit:
+        patch.previewLimit !== undefined
+          ? Math.max(1, Math.min(12, Math.round(patch.previewLimit)))
+          : existing.previewLimit,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await pool.execute(
+      `UPDATE work_collections SET
+        title = ?, slug = ?, description = ?, cover_image_url = ?,
+        layout_style = ?, preview_limit = ?, sort_order = ?, published = ?, updated_at = ?
+      WHERE id = ?`,
+      [
+        updated.title,
+        updated.slug,
+        updated.description,
+        updated.coverImageUrl,
+        updated.layoutStyle,
+        updated.previewLimit,
+        updated.sortOrder,
+        updated.published ? 1 : 0,
+        updated.updatedAt,
+        id,
+      ]
+    );
+    return updated;
+  },
+
+  async reorderCollections(orderedIds: string[]): Promise<WorkCollection[]> {
+    const pool = await ensureReady();
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT id FROM work_collections ORDER BY sort_order ASC, created_at ASC'
+    );
+    const orderMap = new Map(orderedIds.map((id, idx) => [id, idx + 1]));
+    let tailOrder = orderedIds.length + 1;
+    for (const row of rows) {
+      const colId = String(row.id);
+      const nextOrder = orderMap.get(colId) ?? tailOrder++;
+      await pool.execute('UPDATE work_collections SET sort_order = ? WHERE id = ?', [
+        nextOrder,
+        colId,
+      ]);
+    }
+    return this.getCollections({ publishedOnly: false });
+  },
+
+  async deleteCollection(
+    id: string
+  ): Promise<{ collection: WorkCollection; removedMedia: CollectionMediaItem[] } | null> {
+    const pool = await ensureReady();
+    const existing = await this.getCollectionById(id);
+    if (!existing) return null;
+    const removedMedia = existing.media || [];
+    await pool.execute('DELETE FROM work_collections WHERE id = ?', [id]);
+    return { collection: existing, removedMedia };
+  },
+
+  async addCollectionMedia(
+    collectionId: string,
+    items: Array<{
+      mediaType: MediaType;
+      mediaUrl: string;
+      thumbnailUrl: string;
+      aspectRatio?: AspectRatioType;
+      caption?: string;
+      creationDetails?: string;
+      published?: boolean;
+    }>
+  ): Promise<CollectionMediaItem[]> {
+    const pool = await ensureReady();
+    const [maxRows] = await pool.execute<RowDataPacket[]>(
+      'SELECT COALESCE(MAX(sort_order), 0) AS max_sort FROM collection_media WHERE collection_id = ?',
+      [collectionId]
+    );
+    const existingMax = Number(maxRows[0]?.max_sort || 0);
+    const now = new Date().toISOString();
+
+    const created: CollectionMediaItem[] = items.map((item, idx) => ({
+      id: `colm_${crypto.randomUUID().slice(0, 10)}`,
+      collectionId,
+      mediaType: item.mediaType,
+      mediaUrl: item.mediaUrl,
+      thumbnailUrl: item.thumbnailUrl || (item.mediaType === 'image' ? item.mediaUrl : ''),
+      aspectRatio: item.aspectRatio || 'portrait',
+      caption: (item.caption || '').trim(),
+      creationDetails: (item.creationDetails || '').trim(),
+      sortOrder: existingMax + idx + 1,
+      published: item.published !== undefined ? Boolean(item.published) : true,
+      createdAt: now,
+    }));
+
+    for (const m of created) {
+      await pool.execute(
+        `INSERT INTO collection_media (
+          id, collection_id, media_type, media_url, thumbnail_url, aspect_ratio,
+          caption, creation_details, sort_order, published, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          m.id,
+          m.collectionId,
+          m.mediaType,
+          m.mediaUrl,
+          m.thumbnailUrl,
+          m.aspectRatio,
+          m.caption,
+          m.creationDetails,
+          m.sortOrder,
+          m.published ? 1 : 0,
+          m.createdAt,
+        ]
+      );
+    }
+    return created;
+  },
+
+  async updateCollectionMedia(
+    mediaId: string,
+    patch: Partial<
+      Pick<
+        CollectionMediaItem,
+        'caption' | 'creationDetails' | 'aspectRatio' | 'sortOrder' | 'published'
+      >
+    >
+  ): Promise<CollectionMediaItem | null> {
+    const pool = await ensureReady();
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT * FROM collection_media WHERE id = ? LIMIT 1',
+      [mediaId]
+    );
+    if (rows.length === 0) return null;
+    const current = mapCollectionMediaRow(rows[0]);
+    const updated: CollectionMediaItem = {
+      ...current,
+      caption: patch.caption !== undefined ? patch.caption.trim() : current.caption,
+      creationDetails:
+        patch.creationDetails !== undefined ? patch.creationDetails.trim() : current.creationDetails,
+      aspectRatio: patch.aspectRatio !== undefined ? patch.aspectRatio : current.aspectRatio,
+      sortOrder: patch.sortOrder !== undefined ? patch.sortOrder : current.sortOrder,
+      published: patch.published !== undefined ? Boolean(patch.published) : current.published,
+    };
+    await pool.execute(
+      `UPDATE collection_media SET
+        caption = ?, creation_details = ?, aspect_ratio = ?, sort_order = ?, published = ?
+      WHERE id = ?`,
+      [
+        updated.caption,
+        updated.creationDetails,
+        updated.aspectRatio,
+        updated.sortOrder,
+        updated.published ? 1 : 0,
+        mediaId,
+      ]
+    );
+    return updated;
+  },
+
+  async reorderCollectionMedia(
+    collectionId: string,
+    orderedIds: string[]
+  ): Promise<CollectionMediaItem[]> {
+    const pool = await ensureReady();
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT id FROM collection_media WHERE collection_id = ? ORDER BY sort_order ASC, created_at ASC',
+      [collectionId]
+    );
+    const orderMap = new Map(orderedIds.map((id, idx) => [id, idx + 1]));
+    let tailOrder = orderedIds.length + 1;
+    for (const row of rows) {
+      const mId = String(row.id);
+      const nextOrder = orderMap.get(mId) ?? tailOrder++;
+      await pool.execute('UPDATE collection_media SET sort_order = ? WHERE id = ?', [
+        nextOrder,
+        mId,
+      ]);
+    }
+    const [afterRows] = await pool.execute<RowDataPacket[]>(
+      'SELECT * FROM collection_media WHERE collection_id = ? ORDER BY sort_order ASC, created_at ASC',
+      [collectionId]
+    );
+    return afterRows.map(mapCollectionMediaRow);
+  },
+
+  async deleteCollectionMedia(mediaId: string): Promise<CollectionMediaItem | null> {
+    const pool = await ensureReady();
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT * FROM collection_media WHERE id = ? LIMIT 1',
+      [mediaId]
+    );
+    if (rows.length === 0) return null;
+    const removed = mapCollectionMediaRow(rows[0]);
+    await pool.execute('DELETE FROM collection_media WHERE id = ?', [mediaId]);
+    return removed;
+  },
+
+  async getCollectionsOverviewStats(): Promise<CollectionsOverviewStats> {
+    const pool = await ensureReady();
+    const [colAgg] = await pool.execute<RowDataPacket[]>(
+      `SELECT
+        COUNT(*) AS total_collections,
+        COALESCE(SUM(CASE WHEN published = 1 THEN 1 ELSE 0 END), 0) AS published_collections,
+        COALESCE(SUM(CASE WHEN published = 0 THEN 1 ELSE 0 END), 0) AS draft_collections
+      FROM work_collections`
+    );
+    const [mediaAgg] = await pool.execute<RowDataPacket[]>(
+      `SELECT
+        COALESCE(SUM(CASE WHEN media_type = 'image' THEN 1 ELSE 0 END), 0) AS total_photographs,
+        COALESCE(SUM(CASE WHEN media_type = 'video' THEN 1 ELSE 0 END), 0) AS total_videos
+      FROM collection_media`
+    );
+    const c = colAgg[0] || {};
+    const m = mediaAgg[0] || {};
+    return {
+      totalCollections: Number(c.total_collections || 0),
+      publishedCollections: Number(c.published_collections || 0),
+      draftCollections: Number(c.draft_collections || 0),
+      totalPhotographs: Number(m.total_photographs || 0),
+      totalVideos: Number(m.total_videos || 0),
+    };
+  },
 };
+

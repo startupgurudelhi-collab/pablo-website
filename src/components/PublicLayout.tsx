@@ -45,6 +45,7 @@ export function PublicLayout({ settings }: PublicLayoutProps) {
   const nav = {
     home: settings?.navLabels?.home || 'Home',
     work: settings?.navLabels?.work || 'Our Work',
+    collections: 'Collections',
     events: settings?.navLabels?.events || 'Events',
     about: settings?.navLabels?.about || 'About',
     contact: settings?.navLabels?.contact || 'Contact',
@@ -110,13 +111,16 @@ export function PublicLayout({ settings }: PublicLayoutProps) {
             )}
           </Link>
 
-          {/* Zone 2: 5 Clean Single-Line Navigation Links */}
-          <nav aria-label="Primary Navigation" className="hidden md:flex items-center gap-7 lg:gap-8">
+          {/* Zone 2: Clean Single-Line Navigation Links */}
+          <nav aria-label="Primary Navigation" className="hidden md:flex items-center gap-5 lg:gap-7">
             <NavLink to="/" end className={navLinkClass}>
               {nav.home}
             </NavLink>
             <NavLink to="/work" className={navLinkClass}>
               {nav.work}
+            </NavLink>
+            <NavLink to="/collections" className={navLinkClass}>
+              {nav.collections}
             </NavLink>
             <NavLink to="/events" className={navLinkClass}>
               {nav.events}
@@ -177,6 +181,12 @@ export function PublicLayout({ settings }: PublicLayoutProps) {
                 className="py-3 text-base text-[#171614] border-b border-[#171614]/6"
               >
                 {nav.work}
+              </NavLink>
+              <NavLink
+                to="/collections"
+                className="py-3 text-base text-[#171614] border-b border-[#171614]/6"
+              >
+                {nav.collections}
               </NavLink>
               <NavLink
                 to="/events"
@@ -243,6 +253,11 @@ export function PublicLayout({ settings }: PublicLayoutProps) {
                 <li>
                   <Link to="/work" className="hover:text-[#766E64] transition-colors">
                     {nav.work}
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/collections" className="hover:text-[#766E64] transition-colors">
+                    {nav.collections}
                   </Link>
                 </li>
                 <li>

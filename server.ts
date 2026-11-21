@@ -32,6 +32,7 @@ import { store } from './server/store.ts';
 import type {
   AdminUserPublic,
   AspectRatioType,
+  CollectionLayoutStyle,
   EnquiryStatus,
   LegalPageSlug,
   MediaType,
@@ -151,7 +152,9 @@ const upload = multer({
     if (
       file.fieldname === 'thumbnail' ||
       file.fieldname === 'thumbnails' ||
-      file.fieldname === 'cover'
+      file.fieldname === 'cover' ||
+      file.fieldname === 'introImage' ||
+      file.fieldname === 'promoImage'
     ) {
       if (ALLOWED_IMAGE_MIMES.has(mime)) {
         cb(null, true);
@@ -224,6 +227,24 @@ function parseBoolean(value: unknown, fallback = false): boolean {
   if (value === 'true' || value === '1') return true;
   if (value === 'false' || value === '0') return false;
   return fallback;
+}
+
+function parseCollectionLayoutStyle(value: unknown): CollectionLayoutStyle {
+  if (
+    value === 'editorial-split' ||
+    value === 'grid-3' ||
+    value === 'grid-4' ||
+    value === 'asymmetric'
+  ) {
+    return value;
+  }
+  return 'editorial-split';
+}
+
+function parsePreviewLimit(value: unknown, fallback = 3): number {
+  const num = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.max(1, Math.min(12, Math.round(num)));
 }
 
 function validateSafeUrl(value: unknown, fallback = ''): string {
@@ -408,6 +429,41 @@ app.get('/api/public/about', async (_req, res) => {
   } catch (err) {
     console.error('Public about error:', err);
     res.status(500).json({ error: 'Failed to load About page content.' });
+  }
+});
+
+app.get('/api/public/collections', async (_req, res) => {
+  try {
+    const [pageSettings, collections] = await Promise.all([
+      store.getOurWorkSettings(),
+      store.getCollections({ publishedOnly: true }),
+    ]);
+    res.json({ pageSettings, collections });
+  } catch (err) {
+    console.error('Public collections error:', err);
+    res.status(500).json({ error: 'Failed to load studio collections.' });
+  }
+});
+
+app.get('/api/public/collections/:slug', async (req, res) => {
+  try {
+    const slug = sanitizeText(req.params.slug, 200);
+    if (!slug) {
+      res.status(404).json({ error: 'Collection not found.' });
+      return;
+    }
+    const [pageSettings, collection] = await Promise.all([
+      store.getOurWorkSettings(),
+      store.getCollectionBySlug(slug, true),
+    ]);
+    if (!collection) {
+      res.status(404).json({ error: 'Collection not found.' });
+      return;
+    }
+    res.json({ pageSettings, collection });
+  } catch (err) {
+    console.error('Public collection detail error:', err);
+    res.status(500).json({ error: 'Failed to load collection details.' });
   }
 });
 
@@ -1825,6 +1881,455 @@ app.delete('/api/admin/about/process/:id', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('Delete about process step error:', err);
     res.status(500).json({ error: 'Failed to delete process step.' });
+  }
+});
+
+// Our Work & Collections CMS management
+app.get('/api/admin/collections', requireAdmin, async (_req, res) => {
+  try {
+    const [stats, pageSettings, collections] = await Promise.all([
+      store.getCollectionsOverviewStats(),
+      store.getOurWorkSettings(),
+      store.getCollections({ publishedOnly: false }),
+    ]);
+    res.json({ stats, pageSettings, collections });
+  } catch (err) {
+    console.error('Admin collections error:', err);
+    res.status(500).json({ error: 'Failed to load Our Work collections.' });
+  }
+});
+
+app.put(
+  '/api/admin/collections/settings',
+  requireAdmin,
+  upload.fields([
+    { name: 'introImage', maxCount: 1 },
+    { name: 'promoImage', maxCount: 1 },
+  ]),
+  async (req, res) => {
+    const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+    const introFile = files?.introImage?.[0];
+    const promoFile = files?.promoImage?.[0];
+
+    try {
+      if (introFile) {
+        const sizeErr = validateUploadedFileSize(introFile);
+        if (sizeErr) {
+          removeLocalFileIfSafe(introFile.path);
+          removeLocalFileIfSafe(promoFile?.path);
+          res.status(400).json({ error: sizeErr });
+          return;
+        }
+      }
+      if (promoFile) {
+        const sizeErr = validateUploadedFileSize(promoFile);
+        if (sizeErr) {
+          removeLocalFileIfSafe(introFile?.path);
+          removeLocalFileIfSafe(promoFile.path);
+          res.status(400).json({ error: sizeErr });
+          return;
+        }
+      }
+
+      const prev = await store.getOurWorkSettings();
+      const body = req.body || {};
+
+      const nextIntroHeading =
+        body.introHeading !== undefined
+          ? sanitizeText(body.introHeading, 160) || prev.introHeading
+          : prev.introHeading;
+
+      const patch = {
+        introHeading: nextIntroHeading,
+        introSubtitle:
+          body.introSubtitle !== undefined
+            ? sanitizeText(body.introSubtitle, 500)
+            : prev.introSubtitle,
+        introImageUrl: introFile
+          ? `/media/originals/${introFile.filename}`
+          : body.introImageUrl !== undefined
+            ? validateSafeUrl(body.introImageUrl, '')
+            : prev.introImageUrl,
+        promoVisible:
+          body.promoVisible !== undefined
+            ? parseBoolean(body.promoVisible, prev.promoVisible)
+            : prev.promoVisible,
+        promoHeading:
+          body.promoHeading !== undefined
+            ? sanitizeText(body.promoHeading, 200)
+            : prev.promoHeading,
+        promoDescription:
+          body.promoDescription !== undefined
+            ? sanitizeText(body.promoDescription, 800)
+            : prev.promoDescription,
+        promoImageUrl: promoFile
+          ? `/media/originals/${promoFile.filename}`
+          : body.promoImageUrl !== undefined
+            ? validateSafeUrl(body.promoImageUrl, '')
+            : prev.promoImageUrl,
+        promoButtonText:
+          body.promoButtonText !== undefined
+            ? sanitizeText(body.promoButtonText, 80)
+            : prev.promoButtonText,
+        promoButtonUrl:
+          body.promoButtonUrl !== undefined
+            ? validateSafeUrl(body.promoButtonUrl, '/contact')
+            : prev.promoButtonUrl,
+      };
+
+      const pageSettings = await store.updateOurWorkSettings(patch);
+
+      if (prev.introImageUrl && prev.introImageUrl !== pageSettings.introImageUrl) {
+        await removeMediaUrlFromDiskIfUnused(prev.introImageUrl);
+      }
+      if (prev.promoImageUrl && prev.promoImageUrl !== pageSettings.promoImageUrl) {
+        await removeMediaUrlFromDiskIfUnused(prev.promoImageUrl);
+      }
+
+      res.json({ pageSettings });
+    } catch (err) {
+      removeLocalFileIfSafe(introFile?.path);
+      removeLocalFileIfSafe(promoFile?.path);
+      console.error('Update Our Work settings error:', err);
+      res.status(500).json({ error: 'Failed to update Our Work settings.' });
+    }
+  }
+);
+
+app.put('/api/admin/collections/reorder', requireAdmin, async (req, res) => {
+  try {
+    const orderedIds = Array.isArray(req.body?.orderedIds)
+      ? req.body.orderedIds.map((id: unknown) => sanitizeText(id, 100)).filter(Boolean)
+      : [];
+    if (orderedIds.length === 0) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    const collections = await store.reorderCollections(orderedIds);
+    res.json({ collections });
+  } catch (err) {
+    console.error('Reorder collections error:', err);
+    res.status(500).json({ error: 'Failed to reorder collections.' });
+  }
+});
+
+app.post(
+  '/api/admin/collections',
+  requireAdmin,
+  upload.single('cover'),
+  async (req, res) => {
+    const coverFile = req.file;
+    try {
+      if (coverFile) {
+        const sizeErr = validateUploadedFileSize(coverFile);
+        if (sizeErr) {
+          removeLocalFileIfSafe(coverFile.path);
+          res.status(400).json({ error: sizeErr });
+          return;
+        }
+      }
+
+      const title = sanitizeText(req.body?.title, 180);
+      if (title.length < 2) {
+        removeLocalFileIfSafe(coverFile?.path);
+        res.status(400).json({ error: 'Collection title must be at least 2 characters.' });
+        return;
+      }
+
+      const coverImageUrl = coverFile
+        ? `/media/originals/${coverFile.filename}`
+        : validateSafeUrl(req.body?.coverImageUrl, '');
+
+      if (!coverImageUrl) {
+        removeLocalFileIfSafe(coverFile?.path);
+        res.status(400).json({ error: 'Please upload a cover photograph for this collection.' });
+        return;
+      }
+
+      const collection = await store.createCollection({
+        title,
+        slug: sanitizeText(req.body?.slug, 180) || undefined,
+        description: sanitizeText(req.body?.description, 2000),
+        coverImageUrl,
+        layoutStyle: parseCollectionLayoutStyle(req.body?.layoutStyle),
+        previewLimit: parsePreviewLimit(req.body?.previewLimit, 3),
+        published: parseBoolean(req.body?.published, true),
+      });
+
+      res.status(201).json({ collection });
+    } catch (err) {
+      removeLocalFileIfSafe(coverFile?.path);
+      console.error('Create collection error:', err);
+      res.status(500).json({ error: 'Failed to create collection.' });
+    }
+  }
+);
+
+app.patch(
+  '/api/admin/collections/:id',
+  requireAdmin,
+  upload.single('cover'),
+  async (req, res) => {
+    const id = String(req.params.id);
+    const coverFile = req.file;
+
+    try {
+      const existing = await store.getCollectionById(id);
+      if (!existing) {
+        removeLocalFileIfSafe(coverFile?.path);
+        res.status(404).json({ error: 'Collection not found.' });
+        return;
+      }
+
+      if (coverFile) {
+        const sizeErr = validateUploadedFileSize(coverFile);
+        if (sizeErr) {
+          removeLocalFileIfSafe(coverFile.path);
+          res.status(400).json({ error: sizeErr });
+          return;
+        }
+      }
+
+      const patch: Record<string, unknown> = {};
+      if (req.body?.title !== undefined) {
+        const title = sanitizeText(req.body.title, 180);
+        if (title.length < 2) {
+          removeLocalFileIfSafe(coverFile?.path);
+          res.status(400).json({ error: 'Collection title must be at least 2 characters.' });
+          return;
+        }
+        patch.title = title;
+      }
+      if (req.body?.slug !== undefined) {
+        const slugVal = sanitizeText(req.body.slug, 180);
+        if (slugVal) patch.slug = slugVal;
+      }
+      if (req.body?.description !== undefined) {
+        patch.description = sanitizeText(req.body.description, 2000);
+      }
+      if (req.body?.layoutStyle !== undefined) {
+        patch.layoutStyle = parseCollectionLayoutStyle(req.body.layoutStyle);
+      }
+      if (req.body?.previewLimit !== undefined) {
+        patch.previewLimit = parsePreviewLimit(req.body.previewLimit, existing.previewLimit);
+      }
+      if (req.body?.published !== undefined) {
+        patch.published = parseBoolean(req.body.published, existing.published);
+      }
+      if (typeof req.body?.sortOrder === 'number') {
+        patch.sortOrder = req.body.sortOrder;
+      }
+
+      const oldCover = existing.coverImageUrl;
+      if (coverFile) {
+        patch.coverImageUrl = `/media/originals/${coverFile.filename}`;
+      } else if (req.body?.coverImageUrl !== undefined) {
+        const cleanCover = validateSafeUrl(req.body.coverImageUrl, '');
+        if (!cleanCover) {
+          res.status(400).json({ error: 'Collection cover photograph cannot be empty.' });
+          return;
+        }
+        patch.coverImageUrl = cleanCover;
+      }
+
+      const updated = await store.updateCollection(id, patch);
+      if (oldCover && updated?.coverImageUrl !== oldCover) {
+        await removeMediaUrlFromDiskIfUnused(oldCover, id);
+      }
+
+      res.json({ collection: updated });
+    } catch (err) {
+      removeLocalFileIfSafe(coverFile?.path);
+      console.error('Update collection error:', err);
+      res.status(500).json({ error: 'Failed to update collection.' });
+    }
+  }
+);
+
+app.delete('/api/admin/collections/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const result = await store.deleteCollection(id);
+    if (!result) {
+      res.status(404).json({ error: 'Collection not found.' });
+      return;
+    }
+    await removeMediaUrlFromDiskIfUnused(result.collection.coverImageUrl, id);
+    for (const m of result.removedMedia) {
+      await removeMediaUrlFromDiskIfUnused(m.mediaUrl, m.id);
+      if (m.thumbnailUrl && m.thumbnailUrl !== m.mediaUrl) {
+        await removeMediaUrlFromDiskIfUnused(m.thumbnailUrl, m.id);
+      }
+    }
+    res.json({ deleted: true, id });
+  } catch (err) {
+    console.error('Delete collection error:', err);
+    res.status(500).json({ error: 'Failed to delete collection.' });
+  }
+});
+
+app.put('/api/admin/collections/:id/media/reorder', requireAdmin, async (req, res) => {
+  try {
+    const collectionId = String(req.params.id);
+    const existing = await store.getCollectionById(collectionId);
+    if (!existing) {
+      res.status(404).json({ error: 'Collection not found.' });
+      return;
+    }
+    const orderedIds = Array.isArray(req.body?.orderedIds)
+      ? req.body.orderedIds.map((id: unknown) => sanitizeText(id, 100)).filter(Boolean)
+      : [];
+    if (orderedIds.length === 0) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    const media = await store.reorderCollectionMedia(collectionId, orderedIds);
+    res.json({ media });
+  } catch (err) {
+    console.error('Reorder collection media error:', err);
+    res.status(500).json({ error: 'Failed to reorder collection media.' });
+  }
+});
+
+app.post(
+  '/api/admin/collections/:id/media',
+  requireAdmin,
+  upload.fields([
+    { name: 'media', maxCount: 12 },
+    { name: 'thumbnails', maxCount: 12 },
+  ]),
+  async (req, res) => {
+    const collectionId = String(req.params.id);
+    const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+    const mediaFiles = files?.media || [];
+    const thumbFiles = files?.thumbnails || [];
+
+    try {
+      const existing = await store.getCollectionById(collectionId);
+      if (!existing) {
+        mediaFiles.forEach((f) => removeLocalFileIfSafe(f.path));
+        thumbFiles.forEach((f) => removeLocalFileIfSafe(f.path));
+        res.status(404).json({ error: 'Collection not found.' });
+        return;
+      }
+
+      if (mediaFiles.length === 0) {
+        res.status(400).json({ error: 'Please select images or MP4 videos to upload.' });
+        return;
+      }
+
+      for (const file of mediaFiles) {
+        const sizeErr = validateUploadedFileSize(file);
+        if (sizeErr) {
+          mediaFiles.forEach((f) => removeLocalFileIfSafe(f.path));
+          thumbFiles.forEach((f) => removeLocalFileIfSafe(f.path));
+          res.status(400).json({ error: sizeErr });
+          return;
+        }
+      }
+
+      const parseJsonArr = <T,>(raw: unknown, mapFn: (v: unknown) => T): T[] => {
+        if (typeof raw !== 'string') return [];
+        try {
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed.map(mapFn) : [];
+        } catch {
+          return [];
+        }
+      };
+
+      const captions = parseJsonArr(req.body?.captions, (v) => sanitizeText(v, 400));
+      const detailsList = parseJsonArr(req.body?.creationDetailsList, (v) => sanitizeText(v, 1000));
+      const aspectRatios = parseJsonArr(req.body?.aspectRatios, (v) => parseAspectRatio(v));
+      const publishedFlags = parseJsonArr(req.body?.publishedFlags, (v) => parseBoolean(v, true));
+      const hasThumbnails = parseJsonArr(req.body?.hasThumbnails, (v) => Boolean(v));
+
+      let thumbCursor = 0;
+      const created = await store.addCollectionMedia(
+        collectionId,
+        mediaFiles.map((file, idx) => {
+          const isVideo = ALLOWED_VIDEO_MIMES.has(file.mimetype.toLowerCase());
+          const thumbFile =
+            hasThumbnails.length > 0
+              ? hasThumbnails[idx]
+                ? thumbFiles[thumbCursor++]
+                : undefined
+              : thumbFiles[idx];
+          const mediaUrl = `/media/originals/${file.filename}`;
+          const thumbnailUrl = thumbFile
+            ? `/media/thumbnails/${thumbFile.filename}`
+            : isVideo
+              ? ''
+              : mediaUrl;
+          return {
+            mediaType: isVideo ? 'video' : 'image',
+            mediaUrl,
+            thumbnailUrl,
+            aspectRatio: aspectRatios[idx] || parseAspectRatio(req.body?.aspectRatio),
+            caption: captions[idx] ?? sanitizeText(req.body?.caption, 400),
+            creationDetails: detailsList[idx] ?? sanitizeText(req.body?.creationDetails, 1000),
+            published:
+              publishedFlags[idx] !== undefined
+                ? publishedFlags[idx]
+                : parseBoolean(req.body?.published, true),
+          };
+        })
+      );
+
+      res.status(201).json({ media: created });
+    } catch (err) {
+      mediaFiles.forEach((f) => removeLocalFileIfSafe(f.path));
+      thumbFiles.forEach((f) => removeLocalFileIfSafe(f.path));
+      console.error('Upload collection media error:', err);
+      res.status(500).json({ error: 'Failed to upload collection media.' });
+    }
+  }
+);
+
+app.patch('/api/admin/collection-media/:mediaId', requireAdmin, async (req, res) => {
+  try {
+    const mediaId = String(req.params.mediaId);
+    const updated = await store.updateCollectionMedia(mediaId, {
+      caption: req.body?.caption !== undefined ? sanitizeText(req.body.caption, 400) : undefined,
+      creationDetails:
+        req.body?.creationDetails !== undefined
+          ? sanitizeText(req.body.creationDetails, 1000)
+          : undefined,
+      aspectRatio:
+        req.body?.aspectRatio !== undefined
+          ? parseAspectRatio(req.body.aspectRatio)
+          : undefined,
+      sortOrder: typeof req.body?.sortOrder === 'number' ? req.body.sortOrder : undefined,
+      published:
+        req.body?.published !== undefined ? parseBoolean(req.body.published, true) : undefined,
+    });
+    if (!updated) {
+      res.status(404).json({ error: 'Collection media item not found.' });
+      return;
+    }
+    res.json({ media: updated });
+  } catch (err) {
+    console.error('Update collection media error:', err);
+    res.status(500).json({ error: 'Failed to update collection media.' });
+  }
+});
+
+app.delete('/api/admin/collection-media/:mediaId', requireAdmin, async (req, res) => {
+  try {
+    const mediaId = String(req.params.mediaId);
+    const removed = await store.deleteCollectionMedia(mediaId);
+    if (!removed) {
+      res.status(404).json({ error: 'Collection media item not found.' });
+      return;
+    }
+    await removeMediaUrlFromDiskIfUnused(removed.mediaUrl, mediaId);
+    if (removed.thumbnailUrl && removed.thumbnailUrl !== removed.mediaUrl) {
+      await removeMediaUrlFromDiskIfUnused(removed.thumbnailUrl, mediaId);
+    }
+    res.json({ deleted: true, id: mediaId });
+  } catch (err) {
+    console.error('Delete collection media error:', err);
+    res.status(500).json({ error: 'Failed to delete collection media.' });
   }
 });
 

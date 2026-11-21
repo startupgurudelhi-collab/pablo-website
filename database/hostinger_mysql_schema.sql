@@ -221,3 +221,54 @@ CREATE TABLE IF NOT EXISTS `about_process_steps` (
   PRIMARY KEY (`id`),
   KEY `idx_about_process_pub_sort` (`published`, `sort_order`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `our_work_settings` (
+  `id` VARCHAR(64) NOT NULL,
+  `intro_heading` VARCHAR(200) NOT NULL,
+  `intro_subtitle` TEXT NOT NULL,
+  `intro_image_url` VARCHAR(512) NOT NULL,
+  `promo_visible` TINYINT(1) NOT NULL DEFAULT 1,
+  `promo_heading` VARCHAR(240) NOT NULL,
+  `promo_description` TEXT NOT NULL,
+  `promo_image_url` VARCHAR(512) NOT NULL,
+  `promo_button_text` VARCHAR(120) NOT NULL,
+  `promo_button_url` VARCHAR(255) NOT NULL,
+  `updated_at` VARCHAR(40) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `work_collections` (
+  `id` VARCHAR(64) NOT NULL,
+  `title` VARCHAR(200) NOT NULL,
+  `slug` VARCHAR(200) NOT NULL,
+  `description` TEXT NOT NULL,
+  `cover_image_url` VARCHAR(512) NOT NULL,
+  `layout_style` VARCHAR(32) NOT NULL DEFAULT 'editorial-split',
+  `preview_limit` INT NOT NULL DEFAULT 3,
+  `sort_order` INT NOT NULL DEFAULT 0,
+  `published` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` VARCHAR(40) NOT NULL,
+  `updated_at` VARCHAR(40) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_work_collections_slug` (`slug`),
+  KEY `idx_work_collections_pub_sort` (`published`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `collection_media` (
+  `id` VARCHAR(64) NOT NULL,
+  `collection_id` VARCHAR(64) NOT NULL,
+  `media_type` VARCHAR(16) NOT NULL,
+  `media_url` VARCHAR(512) NOT NULL,
+  `thumbnail_url` VARCHAR(512) NOT NULL,
+  `aspect_ratio` VARCHAR(24) NOT NULL DEFAULT 'portrait',
+  `caption` VARCHAR(500) NOT NULL,
+  `creation_details` TEXT NOT NULL,
+  `sort_order` INT NOT NULL DEFAULT 0,
+  `published` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` VARCHAR(40) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_collection_media_col_sort` (`collection_id`, `published`, `sort_order`),
+  CONSTRAINT `fk_collection_media_collection`
+    FOREIGN KEY (`collection_id`) REFERENCES `work_collections` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

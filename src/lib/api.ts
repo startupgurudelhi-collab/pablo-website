@@ -6,22 +6,28 @@ import type {
   AdminOverviewStats,
   AdminUserPublic,
   AspectRatioType,
+  CollectionLayoutStyle,
+  CollectionMediaItem,
+  CollectionsOverviewStats,
   Enquiry,
   EnquiryStatus,
   EventMediaItem,
   LegalPage,
   LegalPageSlug,
   MediaType,
+  OurWorkPageSettings,
   PortfolioCategory,
   PortfolioItem,
   SiteSettings,
   StudioEvent,
+  WorkCollection,
 } from '../types/studio';
 
 const CMS_SYNC_CHANNEL = 'pablo-cms-sync';
 
 export type CmsSyncScope =
   | 'portfolio'
+  | 'collections'
   | 'events'
   | 'about'
   | 'settings'
@@ -75,7 +81,7 @@ async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 function uploadWithProgress<T>(
-  method: 'POST' | 'PATCH',
+  method: 'POST' | 'PATCH' | 'PUT',
   url: string,
   formData: FormData,
   onProgress?: (percent: number) => void
@@ -175,6 +181,18 @@ export async function fetchPublicLegalPage(slug: LegalPageSlug) {
 
 export async function fetchPublicAbout() {
   return requestJson<AboutPageData>('/api/public/about');
+}
+
+export async function fetchPublicCollections() {
+  return requestJson<{ pageSettings: OurWorkPageSettings; collections: WorkCollection[] }>(
+    '/api/public/collections'
+  );
+}
+
+export async function fetchPublicCollectionBySlug(slug: string) {
+  return requestJson<{ pageSettings: OurWorkPageSettings; collection: WorkCollection }>(
+    `/api/public/collections/${encodeURIComponent(slug)}`
+  );
 }
 
 // Auth API
@@ -663,3 +681,252 @@ export async function deleteAboutProcessStep(id: string) {
   notifyCmsUpdated('about');
   return res;
 }
+
+// Our Work & Collections CMS API
+export async function getAdminCollections() {
+  return requestJson<{
+    stats: CollectionsOverviewStats;
+    pageSettings: OurWorkPageSettings;
+    collections: WorkCollection[];
+  }>('/api/admin/collections');
+}
+
+export async function updateOurWorkSettings(
+  payload: Partial<Omit<OurWorkPageSettings, 'id' | 'updatedAt'>> & {
+    introImageFile?: File | null;
+    promoImageFile?: File | null;
+  },
+  onProgress?: (percent: number) => void
+) {
+  if (payload.introImageFile || payload.promoImageFile) {
+    const form = new FormData();
+    if (payload.introHeading !== undefined) form.append('introHeading', payload.introHeading);
+    if (payload.introSubtitle !== undefined) form.append('introSubtitle', payload.introSubtitle);
+    if (payload.introImageUrl !== undefined) form.append('introImageUrl', payload.introImageUrl);
+    if (payload.promoVisible !== undefined) form.append('promoVisible', String(payload.promoVisible));
+    if (payload.promoHeading !== undefined) form.append('promoHeading', payload.promoHeading);
+    if (payload.promoDescription !== undefined) {
+      form.append('promoDescription', payload.promoDescription);
+    }
+    if (payload.promoImageUrl !== undefined) form.append('promoImageUrl', payload.promoImageUrl);
+    if (payload.promoButtonText !== undefined) {
+      form.append('promoButtonText', payload.promoButtonText);
+    }
+    if (payload.promoButtonUrl !== undefined) {
+      form.append('promoButtonUrl', payload.promoButtonUrl);
+    }
+    if (payload.introImageFile) form.append('introImage', payload.introImageFile);
+    if (payload.promoImageFile) form.append('promoImage', payload.promoImageFile);
+
+    const res = await uploadWithProgress<{ pageSettings: OurWorkPageSettings }>(
+      'PUT',
+      '/api/admin/collections/settings',
+      form,
+      onProgress
+    );
+    notifyCmsUpdated('collections');
+    return res;
+  }
+
+  const res = await requestJson<{ pageSettings: OurWorkPageSettings }>(
+    '/api/admin/collections/settings',
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }
+  );
+  notifyCmsUpdated('collections');
+  return res;
+}
+
+export async function createWorkCollection(
+  payload: {
+    title: string;
+    slug?: string;
+    description: string;
+    coverFile?: File | null;
+    coverImageUrl?: string;
+    layoutStyle: CollectionLayoutStyle;
+    previewLimit: number;
+    published: boolean;
+  },
+  onProgress?: (percent: number) => void
+) {
+  const form = new FormData();
+  form.append('title', payload.title);
+  if (payload.slug) form.append('slug', payload.slug);
+  form.append('description', payload.description);
+  form.append('layoutStyle', payload.layoutStyle);
+  form.append('previewLimit', String(payload.previewLimit));
+  form.append('published', String(payload.published));
+  if (payload.coverFile) form.append('cover', payload.coverFile);
+  if (payload.coverImageUrl) form.append('coverImageUrl', payload.coverImageUrl);
+
+  const res = await uploadWithProgress<{ collection: WorkCollection }>(
+    'POST',
+    '/api/admin/collections',
+    form,
+    onProgress
+  );
+  notifyCmsUpdated('collections');
+  return res;
+}
+
+export async function updateWorkCollection(
+  id: string,
+  payload: {
+    title?: string;
+    slug?: string;
+    description?: string;
+    coverFile?: File | null;
+    coverImageUrl?: string;
+    layoutStyle?: CollectionLayoutStyle;
+    previewLimit?: number;
+    published?: boolean;
+    sortOrder?: number;
+  },
+  onProgress?: (percent: number) => void
+) {
+  if (payload.coverFile) {
+    const form = new FormData();
+    if (payload.title !== undefined) form.append('title', payload.title);
+    if (payload.slug !== undefined) form.append('slug', payload.slug);
+    if (payload.description !== undefined) form.append('description', payload.description);
+    if (payload.layoutStyle !== undefined) form.append('layoutStyle', payload.layoutStyle);
+    if (payload.previewLimit !== undefined) {
+      form.append('previewLimit', String(payload.previewLimit));
+    }
+    if (payload.published !== undefined) form.append('published', String(payload.published));
+    if (payload.sortOrder !== undefined) form.append('sortOrder', String(payload.sortOrder));
+    form.append('cover', payload.coverFile);
+
+    const res = await uploadWithProgress<{ collection: WorkCollection }>(
+      'PATCH',
+      `/api/admin/collections/${id}`,
+      form,
+      onProgress
+    );
+    notifyCmsUpdated('collections');
+    return res;
+  }
+
+  const res = await requestJson<{ collection: WorkCollection }>(`/api/admin/collections/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  notifyCmsUpdated('collections');
+  return res;
+}
+
+export async function reorderWorkCollections(orderedIds: string[]) {
+  const res = await requestJson<{ collections: WorkCollection[] }>(
+    '/api/admin/collections/reorder',
+    {
+      method: 'PUT',
+      body: JSON.stringify({ orderedIds }),
+    }
+  );
+  notifyCmsUpdated('collections');
+  return res;
+}
+
+export async function deleteWorkCollection(id: string) {
+  const res = await requestJson<{ deleted: boolean; id: string }>(`/api/admin/collections/${id}`, {
+    method: 'DELETE',
+  });
+  notifyCmsUpdated('collections');
+  return res;
+}
+
+export async function uploadCollectionMedia(
+  collectionId: string,
+  files: Array<{
+    file: File;
+    thumbnailBlob?: Blob | null;
+    aspectRatio?: AspectRatioType;
+    caption?: string;
+    creationDetails?: string;
+    published?: boolean;
+  }>,
+  onProgress?: (percent: number) => void
+) {
+  const form = new FormData();
+  const captions: string[] = [];
+  const creationDetailsList: string[] = [];
+  const aspectRatios: AspectRatioType[] = [];
+  const publishedFlags: boolean[] = [];
+  const hasThumbnails: boolean[] = [];
+
+  for (const entry of files) {
+    form.append('media', entry.file);
+    if (entry.thumbnailBlob) {
+      form.append('thumbnails', entry.thumbnailBlob, 'thumb.webp');
+      hasThumbnails.push(true);
+    } else {
+      hasThumbnails.push(false);
+    }
+    captions.push(entry.caption || '');
+    creationDetailsList.push(entry.creationDetails || '');
+    aspectRatios.push(entry.aspectRatio || 'portrait');
+    publishedFlags.push(entry.published !== undefined ? entry.published : true);
+  }
+
+  form.append('captions', JSON.stringify(captions));
+  form.append('creationDetailsList', JSON.stringify(creationDetailsList));
+  form.append('aspectRatios', JSON.stringify(aspectRatios));
+  form.append('publishedFlags', JSON.stringify(publishedFlags));
+  form.append('hasThumbnails', JSON.stringify(hasThumbnails));
+
+  const res = await uploadWithProgress<{ media: CollectionMediaItem[] }>(
+    'POST',
+    `/api/admin/collections/${collectionId}/media`,
+    form,
+    onProgress
+  );
+  notifyCmsUpdated('collections');
+  return res;
+}
+
+export async function updateCollectionMedia(
+  mediaId: string,
+  payload: Partial<
+    Pick<
+      CollectionMediaItem,
+      'caption' | 'creationDetails' | 'aspectRatio' | 'sortOrder' | 'published'
+    >
+  >
+) {
+  const res = await requestJson<{ media: CollectionMediaItem }>(
+    `/api/admin/collection-media/${mediaId}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }
+  );
+  notifyCmsUpdated('collections');
+  return res;
+}
+
+export async function reorderCollectionMedia(collectionId: string, orderedIds: string[]) {
+  const res = await requestJson<{ media: CollectionMediaItem[] }>(
+    `/api/admin/collections/${collectionId}/media/reorder`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ orderedIds }),
+    }
+  );
+  notifyCmsUpdated('collections');
+  return res;
+}
+
+export async function deleteCollectionMedia(mediaId: string) {
+  const res = await requestJson<{ deleted: boolean; id: string }>(
+    `/api/admin/collection-media/${mediaId}`,
+    {
+      method: 'DELETE',
+    }
+  );
+  notifyCmsUpdated('collections');
+  return res;
+}
+

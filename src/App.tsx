@@ -5,6 +5,8 @@ import type { SiteSettings } from './types/studio';
 import { PublicLayout } from './components/PublicLayout';
 import { HomePage } from './pages/HomePage';
 import { WorkPage } from './pages/WorkPage';
+import { CollectionsPage } from './pages/CollectionsPage';
+import { CollectionGalleryPage } from './pages/CollectionGalleryPage';
 import { EventsPage } from './pages/EventsPage';
 import { AboutPage } from './pages/AboutPage';
 import { ContactPage } from './pages/ContactPage';
@@ -84,6 +86,9 @@ function AppRoutes() {
       <Route element={<PublicLayout settings={settings} />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/work" element={<WorkPage />} />
+        <Route path="/collections" element={<CollectionsPage />} />
+        <Route path="/our-work/collection/:slug" element={<CollectionGalleryPage />} />
+        <Route path="/work/:slug" element={<CollectionGalleryPage />} />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/about" element={<AboutPage settings={settings} />} />
         <Route path="/contact" element={<ContactPage settings={settings} />} />

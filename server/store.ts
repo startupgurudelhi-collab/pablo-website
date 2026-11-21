@@ -13,6 +13,7 @@ import {
   type StudioStore,
   createDefaultAboutData,
   createDefaultLegalPages,
+  createDefaultOurWorkData,
   createDefaultSiteSettings,
   createInitialSeedData,
   createSampleEvents,
@@ -25,16 +26,21 @@ import type {
   AboutServiceCategory,
   AdminUserPublic,
   AspectRatioType,
+  CollectionLayoutStyle,
+  CollectionMediaItem,
+  CollectionsOverviewStats,
   Enquiry,
   EnquiryStatus,
   EventMediaItem,
   LegalPage,
   LegalPageSlug,
   MediaType,
+  OurWorkPageSettings,
   PortfolioCategory,
   PortfolioItem,
   SiteSettings,
   StudioEvent,
+  WorkCollection,
 } from '../src/types/studio.ts';
 
 export { slugify };
@@ -104,6 +110,19 @@ function migrateLoadedDb(rawDb: Partial<DatabaseSchema>): DatabaseSchema {
     ? rawDb.aboutProcessSteps
     : defaultAbout.aboutProcessSteps;
 
+  const defaultOurWork = createDefaultOurWorkData(now);
+  const ourWorkSettings: OurWorkPageSettings = rawDb.ourWorkSettings
+    ? { ...defaultOurWork.ourWorkSettings, ...rawDb.ourWorkSettings }
+    : defaultOurWork.ourWorkSettings;
+
+  const workCollections = Array.isArray(rawDb.workCollections)
+    ? rawDb.workCollections
+    : defaultOurWork.workCollections;
+
+  const collectionMedia = Array.isArray(rawDb.collectionMedia)
+    ? rawDb.collectionMedia
+    : defaultOurWork.collectionMedia;
+
   return {
     adminUsers: rawDb.adminUsers || [],
     categories: rawDb.categories || [],
@@ -115,6 +134,9 @@ function migrateLoadedDb(rawDb: Partial<DatabaseSchema>): DatabaseSchema {
     aboutPage,
     aboutServices,
     aboutProcessSteps,
+    ourWorkSettings,
+    workCollections,
+    collectionMedia,
     enquiries: rawDb.enquiries || [],
     sessions: rawDb.sessions || [],
   };
@@ -152,6 +174,33 @@ function hydrateEvent(db: DatabaseSchema, event: StudioEvent): StudioEvent {
     .filter((m) => m.eventId === event.id)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt));
   return { ...event, media };
+}
+
+function hydrateCollection(
+  db: DatabaseSchema,
+  collection: WorkCollection,
+  publishedMediaOnly = false
+): WorkCollection {
+  const media = db.collectionMedia
+    .filter((m) => m.collectionId === collection.id && (publishedMediaOnly ? m.published : true))
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt));
+  return { ...collection, media };
+}
+
+function buildUniqueCollectionSlug(
+  collections: WorkCollection[],
+  rawInput: string,
+  excludeId?: string
+): string {
+  const base = slugify(rawInput) || 'collection';
+  let candidate = base;
+  let counter = 2;
+  while (
+    collections.some((c) => c.slug === candidate && (!excludeId || c.id !== excludeId))
+  ) {
+    candidate = `${base}-${counter++}`;
+  }
+  return candidate;
 }
 
 export const localStore: StudioStore = {
@@ -629,6 +678,20 @@ export const localStore: StudioStore = {
     if (db.aboutServices.some((svc) => svc.id !== excludeId && svc.imageUrl === url)) {
       return true;
     }
+    const w = db.ourWorkSettings;
+    if (w.introImageUrl === url || w.promoImageUrl === url) {
+      return true;
+    }
+    if (db.workCollections.some((col) => col.id !== excludeId && col.coverImageUrl === url)) {
+      return true;
+    }
+    if (
+      db.collectionMedia.some(
+        (m) => m.id !== excludeId && (m.mediaUrl === url || m.thumbnailUrl === url)
+      )
+    ) {
+      return true;
+    }
     return false;
   },
 
@@ -910,6 +973,253 @@ export const localStore: StudioStore = {
     await persistDb(db);
     return true;
   },
+
+  async getOurWorkSettings(): Promise<OurWorkPageSettings> {
+    return { ...loadDb().ourWorkSettings };
+  },
+
+  async updateOurWorkSettings(
+    patch: Partial<Omit<OurWorkPageSettings, 'id' | 'updatedAt'>>
+  ): Promise<OurWorkPageSettings> {
+    const db = loadDb();
+    db.ourWorkSettings = {
+      ...db.ourWorkSettings,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    await persistDb(db);
+    return { ...db.ourWorkSettings };
+  },
+
+  async getCollections(options?: { publishedOnly?: boolean }): Promise<WorkCollection[]> {
+    const db = loadDb();
+    const publishedOnly = Boolean(options?.publishedOnly);
+    return [...db.workCollections]
+      .filter((col) => (publishedOnly ? col.published : true))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt))
+      .map((col) => hydrateCollection(db, col, publishedOnly));
+  },
+
+  async getCollectionBySlug(slug: string, publishedOnly = false): Promise<WorkCollection | null> {
+    const db = loadDb();
+    const normalized = slug.trim().toLowerCase();
+    const col = db.workCollections.find((c) => c.slug.toLowerCase() === normalized);
+    if (!col) return null;
+    if (publishedOnly && !col.published) return null;
+    return hydrateCollection(db, col, publishedOnly);
+  },
+
+  async getCollectionById(id: string): Promise<WorkCollection | null> {
+    const db = loadDb();
+    const col = db.workCollections.find((c) => c.id === id);
+    return col ? hydrateCollection(db, col, false) : null;
+  },
+
+  async createCollection(input: {
+    title: string;
+    slug?: string;
+    description: string;
+    coverImageUrl: string;
+    layoutStyle: CollectionLayoutStyle;
+    previewLimit: number;
+    published: boolean;
+  }): Promise<WorkCollection> {
+    const db = loadDb();
+    const now = new Date().toISOString();
+    const maxSort = db.workCollections.reduce((max, c) => Math.max(max, c.sortOrder), 0);
+    const slug = buildUniqueCollectionSlug(db.workCollections, input.slug || input.title);
+
+    const created: WorkCollection = {
+      id: `col_${crypto.randomUUID().slice(0, 10)}`,
+      title: input.title.trim(),
+      slug,
+      description: input.description.trim(),
+      coverImageUrl: input.coverImageUrl.trim(),
+      layoutStyle: input.layoutStyle,
+      previewLimit: Math.max(1, Math.min(12, Math.round(input.previewLimit || 3))),
+      sortOrder: maxSort + 1,
+      published: Boolean(input.published),
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.workCollections.push(created);
+    await persistDb(db);
+    return hydrateCollection(db, created, false);
+  },
+
+  async updateCollection(
+    id: string,
+    patch: Partial<
+      Pick<
+        WorkCollection,
+        | 'title'
+        | 'slug'
+        | 'description'
+        | 'coverImageUrl'
+        | 'layoutStyle'
+        | 'previewLimit'
+        | 'sortOrder'
+        | 'published'
+      >
+    >
+  ): Promise<WorkCollection | null> {
+    const db = loadDb();
+    const idx = db.workCollections.findIndex((c) => c.id === id);
+    if (idx === -1) return null;
+    const current = db.workCollections[idx];
+
+    const nextSlug =
+      patch.slug !== undefined && patch.slug.trim()
+        ? buildUniqueCollectionSlug(db.workCollections, patch.slug, id)
+        : current.slug;
+
+    db.workCollections[idx] = {
+      ...current,
+      ...patch,
+      slug: nextSlug,
+      previewLimit:
+        patch.previewLimit !== undefined
+          ? Math.max(1, Math.min(12, Math.round(patch.previewLimit)))
+          : current.previewLimit,
+      updatedAt: new Date().toISOString(),
+    };
+    await persistDb(db);
+    return hydrateCollection(db, db.workCollections[idx], false);
+  },
+
+  async reorderCollections(orderedIds: string[]): Promise<WorkCollection[]> {
+    const db = loadDb();
+    const orderMap = new Map(orderedIds.map((id, idx) => [id, idx + 1]));
+    let tailOrder = orderedIds.length + 1;
+    db.workCollections = db.workCollections
+      .map((col) => ({
+        ...col,
+        sortOrder: orderMap.get(col.id) ?? tailOrder++,
+      }))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt));
+    await persistDb(db);
+    return db.workCollections.map((col) => hydrateCollection(db, col, false));
+  },
+
+  async deleteCollection(
+    id: string
+  ): Promise<{ collection: WorkCollection; removedMedia: CollectionMediaItem[] } | null> {
+    const db = loadDb();
+    const idx = db.workCollections.findIndex((c) => c.id === id);
+    if (idx === -1) return null;
+    const [removed] = db.workCollections.splice(idx, 1);
+    const removedMedia = db.collectionMedia.filter((m) => m.collectionId === id);
+    db.collectionMedia = db.collectionMedia.filter((m) => m.collectionId !== id);
+    await persistDb(db);
+    return { collection: removed, removedMedia };
+  },
+
+  async addCollectionMedia(
+    collectionId: string,
+    items: Array<{
+      mediaType: MediaType;
+      mediaUrl: string;
+      thumbnailUrl: string;
+      aspectRatio?: AspectRatioType;
+      caption?: string;
+      creationDetails?: string;
+      published?: boolean;
+    }>
+  ): Promise<CollectionMediaItem[]> {
+    const db = loadDb();
+    const existingMax = db.collectionMedia
+      .filter((m) => m.collectionId === collectionId)
+      .reduce((max, m) => Math.max(max, m.sortOrder), 0);
+    const now = new Date().toISOString();
+
+    const created: CollectionMediaItem[] = items.map((item, idx) => ({
+      id: `colm_${crypto.randomUUID().slice(0, 10)}`,
+      collectionId,
+      mediaType: item.mediaType,
+      mediaUrl: item.mediaUrl,
+      thumbnailUrl: item.thumbnailUrl || (item.mediaType === 'image' ? item.mediaUrl : ''),
+      aspectRatio: item.aspectRatio || 'portrait',
+      caption: (item.caption || '').trim(),
+      creationDetails: (item.creationDetails || '').trim(),
+      sortOrder: existingMax + idx + 1,
+      published: item.published !== undefined ? Boolean(item.published) : true,
+      createdAt: now,
+    }));
+
+    db.collectionMedia.push(...created);
+    await persistDb(db);
+    return created;
+  },
+
+  async updateCollectionMedia(
+    mediaId: string,
+    patch: Partial<
+      Pick<
+        CollectionMediaItem,
+        'caption' | 'creationDetails' | 'aspectRatio' | 'sortOrder' | 'published'
+      >
+    >
+  ): Promise<CollectionMediaItem | null> {
+    const db = loadDb();
+    const idx = db.collectionMedia.findIndex((m) => m.id === mediaId);
+    if (idx === -1) return null;
+    const current = db.collectionMedia[idx];
+    db.collectionMedia[idx] = {
+      ...current,
+      caption: patch.caption !== undefined ? patch.caption.trim() : current.caption,
+      creationDetails:
+        patch.creationDetails !== undefined ? patch.creationDetails.trim() : current.creationDetails,
+      aspectRatio: patch.aspectRatio !== undefined ? patch.aspectRatio : current.aspectRatio,
+      sortOrder: patch.sortOrder !== undefined ? patch.sortOrder : current.sortOrder,
+      published: patch.published !== undefined ? Boolean(patch.published) : current.published,
+    };
+    await persistDb(db);
+    return db.collectionMedia[idx];
+  },
+
+  async reorderCollectionMedia(
+    collectionId: string,
+    orderedIds: string[]
+  ): Promise<CollectionMediaItem[]> {
+    const db = loadDb();
+    const orderMap = new Map(orderedIds.map((id, idx) => [id, idx + 1]));
+    let tailOrder = orderedIds.length + 1;
+    db.collectionMedia = db.collectionMedia.map((m) =>
+      m.collectionId === collectionId
+        ? { ...m, sortOrder: orderMap.get(m.id) ?? tailOrder++ }
+        : m
+    );
+    await persistDb(db);
+    return db.collectionMedia
+      .filter((m) => m.collectionId === collectionId)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt));
+  },
+
+  async deleteCollectionMedia(mediaId: string): Promise<CollectionMediaItem | null> {
+    const db = loadDb();
+    const idx = db.collectionMedia.findIndex((m) => m.id === mediaId);
+    if (idx === -1) return null;
+    const [removed] = db.collectionMedia.splice(idx, 1);
+    await persistDb(db);
+    return removed;
+  },
+
+  async getCollectionsOverviewStats(): Promise<CollectionsOverviewStats> {
+    const db = loadDb();
+    const totalCollections = db.workCollections.length;
+    const publishedCollections = db.workCollections.filter((c) => c.published).length;
+    const draftCollections = totalCollections - publishedCollections;
+    const totalPhotographs = db.collectionMedia.filter((m) => m.mediaType === 'image').length;
+    const totalVideos = db.collectionMedia.filter((m) => m.mediaType === 'video').length;
+    return {
+      totalCollections,
+      publishedCollections,
+      draftCollections,
+      totalPhotographs,
+      totalVideos,
+    };
+  },
 };
 
 export const store: StudioStore = isMysqlConfigured() ? mysqlStore : localStore;
+

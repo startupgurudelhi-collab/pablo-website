@@ -58,6 +58,7 @@ import { EditItemModal } from '../components/admin/EditItemModal';
 import { EventsManagerPanel } from '../components/admin/EventsManagerPanel';
 import { LegalPagesPanel } from '../components/admin/LegalPagesPanel';
 import { AboutManagerPanel } from '../components/admin/AboutManagerPanel';
+import { CollectionsManagerPanel } from '../components/admin/CollectionsManagerPanel';
 import { StudioMedia } from '../components/StudioMedia';
 
 type AdminSection = 'home' | 'work' | 'events' | 'about' | 'contact';
@@ -86,6 +87,8 @@ export function AdminPage({ onSettingsUpdated }: AdminPageProps) {
 
   // Home collapsible Site Identity / Footer / SEO panel
   const [siteIdentityOpen, setSiteIdentityOpen] = useState(false);
+  // Our Work collapsible Homepage Showcase (portfolio_items + categories) panel
+  const [legacyPortfolioOpen, setLegacyPortfolioOpen] = useState(false);
 
   // Portfolio filters & modals
   const [portfolioFilterCat, setPortfolioFilterCat] = useState('all');
@@ -448,7 +451,8 @@ export function AdminPage({ onSettingsUpdated }: AdminPageProps) {
     },
     work: {
       title: 'Our Work',
-      subtitle: 'Upload and curate portfolio photographs, videos, and outfit categories.',
+      subtitle:
+        'Manage Our Work intro, promotional banner, curated collections, gallery media, and homepage showcase items.',
     },
     events: {
       title: 'Events',
@@ -1260,16 +1264,41 @@ export function AdminPage({ onSettingsUpdated }: AdminPageProps) {
           {/* SECTION 2: OUR WORK */}
           {activeSection === 'work' && (
             <div className="space-y-8">
-              <MediaUploaderPanel
-                categories={categories}
-                onUploaded={(newItems) => {
-                  setItems((prev) => [...newItems, ...prev]);
-                  void refreshOverview();
-                  showToast(
-                    `${newItems.length} ${newItems.length === 1 ? 'creation' : 'creations'} added to portfolio.`
-                  );
-                }}
-              />
+              <CollectionsManagerPanel onNotify={showToast} onError={setErrorMessage} />
+
+              <section className="bg-white border border-[#171614]/10">
+                <button
+                  type="button"
+                  onClick={() => setLegacyPortfolioOpen((prev) => !prev)}
+                  className="w-full px-6 sm:px-8 py-5 flex items-center justify-between gap-4 text-left hover:bg-[#FAF8F5]/60 transition-colors"
+                >
+                  <div>
+                    <h2 className="font-serif text-xl sm:text-2xl font-normal text-[#171614]">
+                      Homepage Featured Portfolio &amp; Categories
+                    </h2>
+                    <p className="mt-1 text-xs text-[#5C5750]">
+                      Manage standalone showcase items used in the Homepage Featured Creations section and hero selector.
+                    </p>
+                  </div>
+                  <ChevronDown
+                    className={`w-5 h-5 text-[#5C5750] shrink-0 transition-transform duration-200 ${
+                      legacyPortfolioOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {legacyPortfolioOpen && (
+                  <div className="p-6 sm:p-8 border-t border-[#171614]/10 space-y-8 bg-[#FAF8F5]">
+                    <MediaUploaderPanel
+                      categories={categories}
+                      onUploaded={(newItems) => {
+                        setItems((prev) => [...newItems, ...prev]);
+                        void refreshOverview();
+                        showToast(
+                          `${newItems.length} ${newItems.length === 1 ? 'creation' : 'creations'} added to portfolio.`
+                        );
+                      }}
+                    />
 
               <section className="bg-white border border-[#171614]/10 p-6 sm:p-8">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#171614]/8">
@@ -1536,6 +1565,9 @@ export function AdminPage({ onSettingsUpdated }: AdminPageProps) {
                   </div>
                 </div>
               </div>
+                  </div>
+                )}
+              </section>
             </div>
           )}
 

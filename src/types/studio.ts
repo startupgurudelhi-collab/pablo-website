@@ -214,3 +214,57 @@ export interface AboutPageData {
   services: AboutServiceCategory[];
   processSteps: AboutProcessStep[];
 }
+
+export type CollectionLayoutStyle = 'editorial-split' | 'grid-3' | 'grid-4' | 'asymmetric';
+
+export interface OurWorkPageSettings {
+  id: string;
+  introHeading: string;
+  introSubtitle: string;
+  introImageUrl: string;
+  promoVisible: boolean;
+  promoHeading: string;
+  promoDescription: string;
+  promoImageUrl: string;
+  promoButtonText: string;
+  promoButtonUrl: string;
+  updatedAt: string;
+}
+
+export interface CollectionMediaItem {
+  id: string;
+  collectionId: string;
+  mediaType: MediaType;
+  mediaUrl: string;
+  thumbnailUrl: string;
+  aspectRatio: AspectRatioType;
+  caption: string;
+  creationDetails: string;
+  sortOrder: number;
+  published: boolean;
+  createdAt: string;
+}
+
+export interface WorkCollection {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  coverImageUrl: string;
+  layoutStyle: CollectionLayoutStyle;
+  previewLimit: number;
+  sortOrder: number;
+  published: boolean;
+  createdAt: string;
+  updatedAt: string;
+  media?: CollectionMediaItem[];
+}
+
+export interface CollectionsOverviewStats {
+  totalCollections: number;
+  publishedCollections: number;
+  draftCollections: number;
+  totalPhotographs: number;
+  totalVideos: number;
+}
+

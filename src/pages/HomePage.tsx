@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Calendar, MapPin, MessageCircle, Play } from 'lucide-react';
-import { fetchHomeData, subscribeCmsUpdates } from '../lib/api';
-import type { PortfolioCategory, PortfolioItem, SiteSettings, StudioEvent } from '../types/studio';
+import { fetchHomeData, fetchPublicCollections, subscribeCmsUpdates } from '../lib/api';
+import type {
+  PortfolioCategory,
+  PortfolioItem,
+  SiteSettings,
+  StudioEvent,
+  WorkCollection,
+} from '../types/studio';
 import { StudioMedia } from '../components/StudioMedia';
 import { LightboxModal } from '../components/LightboxModal';
 import { EventModal, formatEventDate } from '../components/EventModal';
@@ -37,6 +43,7 @@ export function HomePage() {
   const [featuredItems, setFeaturedItems] = useState<PortfolioItem[]>([]);
   const [recentItems, setRecentItems] = useState<PortfolioItem[]>([]);
   const [featuredEvents, setFeaturedEvents] = useState<StudioEvent[]>([]);
+  const [collections, setCollections] = useState<WorkCollection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -46,12 +53,19 @@ export function HomePage() {
     if (!silent) setLoading(true);
     setError('');
     try {
-      const data = await fetchHomeData();
+      const [data, collectionsRes] = await Promise.all([
+        fetchHomeData(),
+        fetchPublicCollections().catch(() => ({
+          pageSettings: null,
+          collections: [] as WorkCollection[],
+        })),
+      ]);
       setSettings(data.settings);
       setCategories(data.categories);
       setFeaturedItems(data.featuredItems);
       setRecentItems(data.recentItems);
       setFeaturedEvents(data.featuredEvents || []);
+      setCollections(collectionsRes.collections || []);
     } catch (err) {
       if (!silent) {
         setError(err instanceof Error ? err.message : 'Unable to load studio showcase.');
@@ -247,6 +261,175 @@ export function HomePage() {
           )}
         </div>
       </section>
+
+      {/* Explore Our Collections (Dynamic from GET /api/public/collections) */}
+      {collections.length > 0 && (
+        <section
+          aria-labelledby="home-collections-heading"
+          className="bg-[#FAF8F5] border-b border-[#171614]/8 py-16 sm:py-24"
+        >
+          <div className="max-w-7xl mx-auto px-5 sm:px-8">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-10 border-b border-[#171614]/10">
+              <div>
+                <p className="text-xs tracking-[0.16em] uppercase text-[#766E64]">
+                  Curated Atelier Archive
+                </p>
+                <h2
+                  id="home-collections-heading"
+                  className="mt-2 font-serif text-3xl sm:text-4xl font-normal text-[#171614] editorial-balance"
+                >
+                  Explore Our Collections
+                </h2>
+              </div>
+              <Link
+                to="/work"
+                className="inline-flex items-center gap-2 text-sm font-medium text-[#171614] hover:text-[#5C5750] transition-colors whitespace-nowrap shrink-0"
+              >
+                <span>View All Collections</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+
+            {/* Lead Collection Editorial Split */}
+            {(() => {
+              const lead = collections[0];
+              const leadMedia = lead.media || [];
+              const leadPhotos = leadMedia.filter((m) => m.mediaType === 'image').length;
+              const leadVideos = leadMedia.filter((m) => m.mediaType === 'video').length;
+              const countParts: string[] = [];
+              if (leadPhotos > 0) {
+                countParts.push(`${leadPhotos} ${leadPhotos === 1 ? 'Photograph' : 'Photographs'}`);
+              }
+              if (leadVideos > 0) {
+                countParts.push(`${leadVideos} ${leadVideos === 1 ? 'Video' : 'Videos'}`);
+              }
+
+              return (
+                <article className="mt-10 bg-white border border-[#171614]/10 grid grid-cols-1 lg:grid-cols-12 overflow-hidden group">
+                  <Link
+                    to={`/our-work/collection/${lead.slug}`}
+                    className="lg:col-span-7 relative aspect-[16/10] lg:aspect-auto lg:min-h-[420px] bg-[#EFECE6] overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#171614]"
+                  >
+                    <StudioMedia
+                      src={lead.coverImageUrl}
+                      thumbnailSrc={lead.coverImageUrl}
+                      mediaType="image"
+                      alt={lead.title}
+                      className="w-full h-full object-cover transition-transform duration-500 editorial-transition group-hover:scale-[1.03]"
+                    />
+                  </Link>
+
+                  <div className="lg:col-span-5 p-6 sm:p-10 flex flex-col justify-between">
+                    <div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono tabular-nums uppercase tracking-[0.14em] text-[#766E64]">
+                        <span>Collection 01</span>
+                        {countParts.length > 0 && <span>{countParts.join(' · ')}</span>}
+                      </div>
+
+                      <h3 className="mt-4 font-serif text-3xl sm:text-4xl font-normal text-[#171614] leading-[1.08] editorial-balance">
+                        <Link
+                          to={`/our-work/collection/${lead.slug}`}
+                          className="hover:text-[#5C5750] transition-colors"
+                        >
+                          {lead.title}
+                        </Link>
+                      </h3>
+
+                      {lead.description && (
+                        <p className="mt-4 text-sm sm:text-base text-[#5C5750] leading-relaxed line-clamp-3">
+                          {lead.description}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="mt-8 pt-6 border-t border-[#171614]/8 flex flex-wrap items-center justify-between gap-4">
+                      <Link
+                        to={`/our-work/collection/${lead.slug}`}
+                        className="inline-flex items-center gap-2.5 px-6 py-3 text-xs sm:text-sm font-medium bg-[#171614] text-[#FAF8F5] hover:bg-[#2E2B27] transition-colors whitespace-nowrap"
+                      >
+                        <span>Explore Collection</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </Link>
+                      <Link
+                        to="/work"
+                        className="text-xs font-medium text-[#5C5750] hover:text-[#171614] underline underline-offset-4 transition-colors"
+                      >
+                        All Studio Works
+                      </Link>
+                    </div>
+                  </div>
+                </article>
+              );
+            })()}
+
+            {/* Remaining Collections Grid */}
+            {collections.length > 1 && (
+              <div className="mt-8 sm:mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-7 lg:gap-8">
+                {collections.slice(1).map((col, idx) => {
+                  const media = col.media || [];
+                  const photoCount = media.filter((m) => m.mediaType === 'image').length;
+                  const videoCount = media.filter((m) => m.mediaType === 'video').length;
+                  const indexLabel = String(idx + 2).padStart(2, '0');
+                  const countText =
+                    photoCount > 0 || videoCount > 0
+                      ? [
+                          photoCount > 0
+                            ? `${photoCount} ${photoCount === 1 ? 'Photo' : 'Photos'}`
+                            : '',
+                          videoCount > 0
+                            ? `${videoCount} ${videoCount === 1 ? 'Video' : 'Videos'}`
+                            : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')
+                      : '';
+
+                  return (
+                    <article key={col.id} className="group flex flex-col justify-between">
+                      <Link
+                        to={`/our-work/collection/${col.slug}`}
+                        className="block focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#171614]"
+                      >
+                        <div className="relative aspect-[3/4] bg-[#EFECE6] overflow-hidden">
+                          <StudioMedia
+                            src={col.coverImageUrl}
+                            thumbnailSrc={col.coverImageUrl}
+                            mediaType="image"
+                            alt={col.title}
+                            className="w-full h-full object-cover transition-transform duration-500 editorial-transition group-hover:scale-[1.03]"
+                          />
+                        </div>
+
+                        <div className="pt-4">
+                          <div className="flex items-center justify-between gap-2 text-[11px] font-mono tabular-nums uppercase tracking-[0.12em] text-[#766E64]">
+                            <span>Collection {indexLabel}</span>
+                            {countText && <span>{countText}</span>}
+                          </div>
+
+                          <h3 className="mt-1.5 font-serif text-2xl font-normal text-[#171614] leading-snug group-hover:text-[#5C5750] transition-colors">
+                            {col.title}
+                          </h3>
+
+                          {col.description && (
+                            <p className="mt-1.5 text-sm text-[#5C5750] line-clamp-2 leading-relaxed">
+                              {col.description}
+                            </p>
+                          )}
+
+                          <span className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium tracking-wide text-[#171614] underline underline-offset-4 group-hover:text-[#5C5750] transition-colors">
+                            <span>Explore Collection</span>
+                            <ArrowRight className="w-3.5 h-3.5 transition-transform duration-300 group-hover:translate-x-0.5" />
+                          </span>
+                        </div>
+                      </Link>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Featured Events Showcase */}
       {featuredEvents.length > 0 && (
