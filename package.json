@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server.js",
+    "postinstall": "node -e \"import('node:fs').then(async fs=>{if(fs.existsSync('node_modules/vite')&&fs.existsSync('node_modules/esbuild')){const cp=await import('node:child_process');cp.execSync('npm run build',{stdio:'inherit'})}})\"",
     "start": "node server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
