@@ -3,7 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export const PORT = Number(process.env.PORT || 3000);
-export const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const RUNNING_FROM_DIST =
+  import.meta.url.replace(/\\/g, '/').endsWith('/dist/server.js') ||
+  Boolean(process.argv[1]?.replace(/\\/g, '/').endsWith('/dist/server.js'));
+export const IS_PRODUCTION = process.env.NODE_ENV === 'production' || RUNNING_FROM_DIST;
 
 export const DATA_DIR = path.resolve(process.cwd(), process.env.DATA_DIR || './data');
 export const MEDIA_DIR = path.resolve(process.cwd(), process.env.MEDIA_DIR || './storage/media');

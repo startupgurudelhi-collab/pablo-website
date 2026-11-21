@@ -44,13 +44,14 @@ The server creates all 9 tables automatically when it boots, so manual import is
 
 ## Step 3: Set Up the Node.js Web App in Hostinger hPanel
 
-1. In Hostinger hPanel, open **Websites -> Add Website** (or open your domain's dashboard) and navigate to **Advanced -> Node.js** (or **Deploy -> Node.js Web App**, depending on your hPanel layout).
-2. Connect your Git repository (recommended) or upload your project ZIP via **File Manager** (do not include `node_modules/` when zipping).
-3. Select **Node.js version `22.x`** (required for `"start": "node server.ts"`).
-4. Configure build & start settings:
-   - **Build Command**: `npm install && npm run build`
-   - **Start Command**: `npm start`
-   - **Entry File** (if asked separately): `server.ts`
+1. Push your latest code (including `package.json`, `server/`, and `database/`) to your GitHub repository, or upload your project ZIP via **File Manager** (excluding `node_modules/`).
+2. In Hostinger hPanel, open **Websites → Add Website** (or your domain dashboard) → **Node.js Web App**.
+3. Configure the build and entry settings exactly as follows:
+   - **Node.js Version**: `22`
+   - **Application Type**: `Express`
+   - **Build Command**: `npm run build` *(Do not leave this as `none` — `npm run build` compiles both `dist/index.html` and `dist/server.js`.)*
+   - **Output Directory**: `none` *(Express serves the built frontend directly from `dist/`.)*
+   - **Entry File**: `dist/server.js` *(Or `server.ts` if running via `npm start`.)*
 
 > **Important:** Make sure `storage/media` and `data` directories are writable by your Node.js app so uploaded portfolio photos, event videos, and session secrets persist across rebuilds (uploaded files are stored in `./storage/media`, outside `./dist`).
 
